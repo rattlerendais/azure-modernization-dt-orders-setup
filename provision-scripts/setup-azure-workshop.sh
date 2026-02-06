@@ -573,9 +573,16 @@ configure_vm_workshop() {
         --subscription "$subscription" \
         --command-id RunShellScript \
         --scripts "
-            # Update packages and install git and docker
+            # Update packages and install prerequisites
             sudo apt-get update -y
-            sudo apt-get install -y git docker.io docker-compose
+            sudo apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common git jq
+
+            # Install Docker from official Docker repository
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+            sudo add-apt-repository -y 'deb [arch=amd64] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable'
+            sudo apt-get update -y
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+            sudo apt-get install -y docker-compose
 
             # Start and enable docker service
             sudo systemctl start docker
