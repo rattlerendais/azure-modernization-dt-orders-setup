@@ -1,7 +1,8 @@
 #!/bin/bash
-source ./_provision-scripts.lib
+source ../provision-scripts/_provision-scripts.lib 2>/dev/null || true
+
 echo "=========================================================="
-echo "Starting app on k8"
+echo "Starting Hipster Shop on k8"
 echo "=========================================================="
 
 echo "----------------------------------------------------------"

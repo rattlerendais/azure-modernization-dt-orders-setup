@@ -1,6 +1,24 @@
 #!/bin/bash
 
-source ./_provision-scripts.lib
+source ../provision-scripts/_provision-scripts.lib 2>/dev/null || true
+
+# Check if kubectl is configured and can connect to the cluster
+echo "=========================================================="
+echo "Checking AKS cluster connectivity..."
+echo "=========================================================="
+if ! kubectl cluster-info &>/dev/null; then
+    echo "ERROR: Cannot connect to Kubernetes cluster."
+    echo ""
+    echo "Please run the following command to get AKS credentials:"
+    echo "  az aks get-credentials --resource-group <RESOURCE_GROUP> --name <AKS_CLUSTER_NAME>"
+    echo ""
+    echo "Example:"
+    echo "  az aks get-credentials --resource-group dynatrace-azure-workshop --name dynatrace-azure-workshop-cluster"
+    echo ""
+    exit 1
+fi
+echo "Connected to cluster successfully."
+echo ""
 
 echo "=========================================================="
 echo "Starting app on k8"
