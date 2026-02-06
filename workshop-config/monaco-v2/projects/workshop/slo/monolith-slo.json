@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "name": "{{ .name }}",
+  "metricExpression": "(100)*(builtin:service.errors.server.successCount:splitBy())/(builtin:service.requestCount.server:splitBy())",
+  "target": 95,
+  "warning": 97,
+  "evaluationType": "AGGREGATE",
+  "timeframe": "-1d",
+  "filter": "mzName(\"{{ .mzname }}\"),type(\"SERVICE\")"
+}

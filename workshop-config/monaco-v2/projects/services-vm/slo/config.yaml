@@ -1,0 +1,9 @@
+configs:
+  - id: services-slo
+    type:
+      api: slo
+    config:
+      name: DT-Orders Services Error Rate
+      template: services-slo.json
+      parameters:
+        mzname: dt-orders-services

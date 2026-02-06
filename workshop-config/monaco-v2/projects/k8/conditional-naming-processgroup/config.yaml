@@ -1,0 +1,7 @@
+configs:
+  - id: dt-orders
+    type:
+      api: conditional-naming-processgroup
+    config:
+      name: dt-orders
+      template: dt-orders.json

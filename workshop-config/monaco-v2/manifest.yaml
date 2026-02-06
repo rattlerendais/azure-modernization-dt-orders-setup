@@ -1,0 +1,28 @@
+manifestVersion: 1.0
+
+# =============================================================================
+# Monaco v2 Configuration for DT-Orders Workshop
+# =============================================================================
+
+projects:
+  - name: workshop
+    path: projects/workshop
+  - name: k8
+    path: projects/k8
+  - name: services-vm
+    path: projects/services-vm
+  - name: db
+    path: projects/db
+  - name: synthetics
+    path: projects/synthetics
+
+environmentGroups:
+  - name: default
+    environments:
+      - name: workshop
+        url:
+          type: environment
+          value: DT_BASEURL
+        auth:
+          token:
+            name: DT_API_TOKEN

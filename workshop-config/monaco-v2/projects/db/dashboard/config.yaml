@@ -1,0 +1,9 @@
+configs:
+  - id: dashboard
+    type:
+      api: dashboard
+    config:
+      name: Cloud Modernization Success
+      template: dashboard.json
+      parameters:
+        owner: "{{ .Env.OWNER }}"

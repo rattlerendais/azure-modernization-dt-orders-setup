@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dynatrace/dynatrace-configuration-as-code/v2/pkg/delete/persistence/full-file-definition",
+  "properties": {
+    "delete": {
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "The project the config was in - required for configs with generated IDs (e.g. Settings 2.0"
+          },
+          "type": {
+            "type": "string",
+            "description": "The type of config to be deleted."
+          },
+          "id": {
+            "type": "string",
+            "description": "The monaco ID of the config to be deleted - required for configs with generated IDs (e.g. Settings 2.0"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the config to be deleted - required for configs deleted by name (classic Config API types). It can't be combined with 'objectId' or 'id'."
+          },
+          "objectId": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "description": "The scope of the config to be deleted - required for API configs that require a scope"
+          },
+          "CustomValues": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "type"
+        ]
+      },
+      "type": "array"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object"
+}

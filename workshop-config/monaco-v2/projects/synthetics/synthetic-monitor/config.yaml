@@ -1,0 +1,30 @@
+configs:
+  - id: site1
+    type:
+      api: synthetic-monitor
+    config:
+      name: Demo Availability Site 1
+      template: availability.json
+      parameters:
+        location: GEOLOCATION-0DF9A0E1095A5A62
+        host: "https://www.dynatrace.com/"
+
+  - id: site2
+    type:
+      api: synthetic-monitor
+    config:
+      name: Demo Availability Site 2
+      template: availability.json
+      parameters:
+        location: GEOLOCATION-0DF9A0E1095A5A62
+        host: "https://support.dynatrace.com"
+
+  - id: site3
+    type:
+      api: synthetic-monitor
+    config:
+      name: Demo Availability Site 3
+      template: availability.json
+      parameters:
+        location: GEOLOCATION-0DF9A0E1095A5A62
+        host: "https://university.dynatrace.com/"
