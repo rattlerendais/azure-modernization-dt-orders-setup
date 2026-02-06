@@ -2,22 +2,47 @@
 
 source ../provision-scripts/_provision-scripts.lib 2>/dev/null || true
 
-# Check if kubectl is configured and can connect to the cluster
+# Load credentials from workshop-credentials.json if available
+CREDS_FILE="../gen/workshop-credentials.json"
+if [ -f "$CREDS_FILE" ]; then
+    AZURE_RESOURCE_GROUP=$(cat "$CREDS_FILE" | jq -r '.AZURE_RESOURCE_GROUP // empty')
+    AZURE_AKS_CLUSTER_NAME=$(cat "$CREDS_FILE" | jq -r '.AZURE_AKS_CLUSTER_NAME // empty')
+    EMAIL=$(cat "$CREDS_FILE" | jq -r '.EMAIL // empty')
+    DT_ENVIRONMENT_ID=$(cat "$CREDS_FILE" | jq -r '.DT_ENVIRONMENT_ID // empty')
+fi
+
+# Use defaults if not set
+AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-"dynatrace-azure-workshop"}
+AZURE_AKS_CLUSTER_NAME=${AZURE_AKS_CLUSTER_NAME:-"dynatrace-azure-workshop-cluster"}
+
 echo "=========================================================="
-echo "Checking AKS cluster connectivity..."
+echo "Configuring AKS cluster credentials..."
 echo "=========================================================="
-if ! kubectl cluster-info &>/dev/null; then
-    echo "ERROR: Cannot connect to Kubernetes cluster."
+echo "Resource Group: $AZURE_RESOURCE_GROUP"
+echo "AKS Cluster:    $AZURE_AKS_CLUSTER_NAME"
+echo ""
+
+# Get AKS credentials
+echo "Running: az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AZURE_AKS_CLUSTER_NAME --overwrite-existing"
+if ! az aks get-credentials --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_AKS_CLUSTER_NAME" --overwrite-existing 2>/dev/null; then
     echo ""
-    echo "Please run the following command to get AKS credentials:"
-    echo "  az aks get-credentials --resource-group <RESOURCE_GROUP> --name <AKS_CLUSTER_NAME>"
-    echo ""
-    echo "Example:"
-    echo "  az aks get-credentials --resource-group dynatrace-azure-workshop --name dynatrace-azure-workshop-cluster"
+    echo "ERROR: Failed to get AKS credentials."
+    echo "Please verify:"
+    echo "  - Resource group '$AZURE_RESOURCE_GROUP' exists"
+    echo "  - AKS cluster '$AZURE_AKS_CLUSTER_NAME' exists in that resource group"
+    echo "  - You are logged into Azure CLI (run 'az login' if needed)"
     echo ""
     exit 1
 fi
-echo "Connected to cluster successfully."
+
+# Verify connectivity
+echo ""
+echo "Verifying cluster connectivity..."
+if ! kubectl cluster-info &>/dev/null; then
+    echo "ERROR: Cannot connect to Kubernetes cluster after getting credentials."
+    exit 1
+fi
+echo "Connected to AKS cluster successfully."
 echo ""
 
 echo "=========================================================="
