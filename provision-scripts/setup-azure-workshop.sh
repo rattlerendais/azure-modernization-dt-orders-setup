@@ -761,6 +761,75 @@ save_aifoundry_credentials() {
         print_error "Failed to update credentials file"
         return 1
     fi
+
+    # Update the Travel Advisor manifest with AI Foundry and OTEL credentials
+    update_traveladvisor_manifest "$AZURE_AIFOUNDRY_ENDPOINT" "$AZURE_AIFOUNDRY_MODEL_KEY" "$creds_file"
+}
+
+# =============================================================================
+# Update Travel Advisor Manifest with AI Foundry and OTEL credentials
+# =============================================================================
+
+update_traveladvisor_manifest() {
+    local endpoint=$1
+    local api_key=$2
+    local creds_file=$3
+
+    TRAVELADVISOR_MANIFEST="../app-scripts/manifests/traveladvisor-combined.yaml"
+
+    if [ ! -f "$TRAVELADVISOR_MANIFEST" ]; then
+        print_warning "Travel Advisor manifest not found at $TRAVELADVISOR_MANIFEST"
+        return 1
+    fi
+
+    print_header "Updating Travel Advisor Manifest"
+
+    # Read DT credentials from the credentials file for OTEL configuration
+    local dt_environment_id=""
+    local dt_api_token=""
+    if [ -f "$creds_file" ]; then
+        dt_environment_id=$(cat "$creds_file" | jq -r '.DT_ENVIRONMENT_ID // empty')
+        dt_api_token=$(cat "$creds_file" | jq -r '.DT_API_TOKEN // empty')
+    fi
+
+    echo "Updating manifest with Azure OpenAI credentials..."
+
+    # Update AZURE_OPENAI_ENDPOINT
+    sed -i 's~AZURE_OPENAI_ENDPOINT:.*~AZURE_OPENAI_ENDPOINT: "'"$endpoint"'"~' "$TRAVELADVISOR_MANIFEST"
+
+    # Update AZURE_OPENAI_KEY
+    sed -i 's~AZURE_OPENAI_KEY:.*~AZURE_OPENAI_KEY: "'"$api_key"'"~' "$TRAVELADVISOR_MANIFEST"
+
+    # Update AZURE_OPENAI_API_KEY
+    sed -i 's~AZURE_OPENAI_API_KEY:.*~AZURE_OPENAI_API_KEY: "'"$api_key"'"~' "$TRAVELADVISOR_MANIFEST"
+
+    print_success "Updated Azure OpenAI credentials"
+    echo "  AZURE_OPENAI_ENDPOINT: $endpoint"
+    echo "  AZURE_OPENAI_KEY: [REDACTED]"
+
+    # Update OTEL credentials if DT credentials are available
+    if [ -n "$dt_environment_id" ] && [ -n "$dt_api_token" ]; then
+        echo ""
+        echo "Updating manifest with OTEL credentials..."
+
+        local otel_endpoint="https://${dt_environment_id}.live.dynatrace.com/api/v2/otlp"
+
+        # Update OTEL_ENDPOINT
+        sed -i 's~OTEL_ENDPOINT:.*~OTEL_ENDPOINT: "'"$otel_endpoint"'"~' "$TRAVELADVISOR_MANIFEST"
+
+        # Update OTEL_API_TOKEN
+        sed -i 's~OTEL_API_TOKEN:.*~OTEL_API_TOKEN: "'"$dt_api_token"'"~' "$TRAVELADVISOR_MANIFEST"
+
+        print_success "Updated OTEL credentials"
+        echo "  OTEL_ENDPOINT: $otel_endpoint"
+        echo "  OTEL_API_TOKEN: [REDACTED]"
+    else
+        print_warning "DT credentials not found in $creds_file - OTEL settings not updated"
+        echo "  To configure OTEL, ensure DT_ENVIRONMENT_ID and DT_API_TOKEN are in your credentials file"
+    fi
+
+    echo ""
+    print_success "Travel Advisor manifest updated: $TRAVELADVISOR_MANIFEST"
 }
 
 save_aifoundry_creds_mode() {
