@@ -1110,7 +1110,22 @@ main() {
     # Check current resource status
     check_all_resources_status
 
-    # Register required resource providers
+    # If ALL resources already exist, skip provisioning and just show summary
+    if [ "$RG_EXISTS" == "true" ] && [ "$VM_EXISTS" == "true" ] && [ "$AKS_EXISTS" == "true" ] && [ "$AIFOUNDRY_EXISTS" == "true" ]; then
+        print_header "All Resources Already Exist"
+        echo ""
+        print_success "All resources are already provisioned. No action needed."
+        echo ""
+        echo "If you need to reconfigure the VM or update credentials, use:"
+        echo "  ./setup-azure-workshop.sh --configure-workshop"
+        echo ""
+
+        # Print final summary
+        print_summary
+        exit 0
+    fi
+
+    # Register required resource providers (only if we need to create something)
     register_resource_providers
 
     # Create resources
