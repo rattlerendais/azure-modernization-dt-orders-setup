@@ -561,9 +561,10 @@ configure_vm_workshop() {
 
     echo "Running configuration script on VM..."
     echo "This will:"
-    echo "  - Update packages and install git"
+    echo "  - Update packages and install git, docker"
     echo "  - Create /home/workshop directory"
     echo "  - Clone the azure-modernization-dt-orders-setup repository"
+    echo "  - Start the monolith application"
     echo ""
 
     RESULT=$(az vm run-command invoke \
@@ -572,9 +573,16 @@ configure_vm_workshop() {
         --subscription "$subscription" \
         --command-id RunShellScript \
         --scripts "
-            # Update packages and install git
+            # Update packages and install git and docker
             sudo apt-get update -y
-            sudo apt-get install -y git
+            sudo apt-get install -y git docker.io docker-compose
+
+            # Start and enable docker service
+            sudo systemctl start docker
+            sudo systemctl enable docker
+
+            # Add workshop user to docker group
+            sudo usermod -aG docker workshop 2>/dev/null || sudo usermod -aG docker azureuser 2>/dev/null
 
             # Create workshop directory
             sudo mkdir -p /home/workshop
@@ -594,6 +602,12 @@ configure_vm_workshop() {
 
             # Add user to sudo group (workshop user if exists, otherwise skip)
             sudo usermod -a -G sudo workshop 2>/dev/null || echo 'workshop user not found, skipping sudo group addition'
+
+            # Start the monolith application
+            echo 'Starting monolith application...'
+            cd /home/workshop/azure-modernization-dt-orders-setup/app-scripts
+            chmod +x start-monolith.sh
+            ./start-monolith.sh
 
             echo 'VM configuration completed successfully!'
         " \
