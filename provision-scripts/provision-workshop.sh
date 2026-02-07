@@ -131,8 +131,8 @@ make_creds_file() {
   DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
   HOSTNAME_MONOLITH=dt-orders-monolith
   HOSTNAME_SERVICES=dt-orders-services
-  CLUSTER_NAME=dynatrace-workshop-cluster
-  AZURE_RESOURCE_GROUP=dynatrace-azure-modernize-workshop
+  CLUSTER_NAME=dynatrace-azure-workshop-cluster
+  AZURE_RESOURCE_GROUP=dynatrace-azure-workshop
   AZURE_SUBSCRIPTION=$(az account list --all --query "[?isDefault].id" --output tsv)
 
   # pull out the DT_ENVIRONMENT_ID. DT_BASEURL will be one of these patterns
