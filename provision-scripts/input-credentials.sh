@@ -103,7 +103,7 @@ if [ "${DT_BASEURL: -1}" == "/" ]; then
   DT_BASEURL="$(echo ${DT_BASEURL%?})"
 fi
 
-DT_TOKEN=$(curl --silent -X POST "https://$DT_ENVIRONMENT_ID.live.dynatrace.com/api/v2/apiTokens" -H "accept: application/json; charset=utf-8" -H "Content-Type: application/json; charset=utf-8" -d "{\"scopes\":[\"slo.read\",\"slo.write\",\"settings.read\",\"events.read\",\"events.ingest\",\"settings.write\",\"ReadConfig\",\"WriteConfig\",\"activeGateTokenManagement.create\",\"metrics.ingest\",\"logs.ingest\",\"entities.read\",\"DataExport\",\"openTelemetryTrace.ingest\",\"InstallerDownload\",\"SupportAlert\"],\"name\":\"azure-workshop-auto\"}" -H "Authorization: Api-Token $DT_ACCESS_API_TOKEN")
+DT_TOKEN=$(curl --silent -X POST "https://$DT_ENVIRONMENT_ID.live.dynatrace.com/api/v2/apiTokens" -H "accept: application/json; charset=utf-8" -H "Content-Type: application/json; charset=utf-8" -d "{\"scopes\":[\"slo.read\",\"slo.write\",\"settings.read\",\"events.read\",\"events.ingest\",\"settings.write\",\"ReadConfig\",\"WriteConfig\",\"activeGateTokenManagement.create\",\"metrics.ingest\",\"logs.ingest\",\"entities.read\",\"DataExport\",\"openTelemetryTrace.ingest\",\"InstallerDownload\",\"SupportAlert\",\"document:documents:read\",\"document:documents:write\",\"document:documents:delete\"],\"name\":\"azure-workshop-auto\"}" -H "Authorization: Api-Token $DT_ACCESS_API_TOKEN")
 
 DT_WORKSHOP_TOKEN=$(echo $DT_TOKEN | jq -r .token)
 
