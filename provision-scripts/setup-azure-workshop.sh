@@ -1117,22 +1117,143 @@ show_usage() {
     echo ""
     echo "Usage: $0 [OPTIONS]"
     echo ""
+    echo "Without options (recommended):"
+    echo "  The script auto-detects if resources exist:"
+    echo "    - If resources exist: Configures VM and saves credentials"
+    echo "    - If resources don't exist: Creates them, then configures"
+    echo ""
     echo "Options:"
     echo "  --check                 Check if resources exist without creating them"
-    echo "  --configure-workshop    Configure VM + save AI Foundry creds (run after provisioning)"
+    echo "  --configure-workshop    Configure VM + save AI Foundry creds (interactive)"
     echo "  --configure-vm          Configure VM only (clone repo, open port 80)"
     echo "  --save-aifoundry-creds  Save AI Foundry credentials only"
     echo "  --help                  Show this help message"
     echo ""
-    echo "Without options, the script will interactively gather inputs and"
-    echo "create all resources (Resource Group, VM, AKS, AI Foundry)."
-    echo ""
     echo "Examples:"
-    echo "  $0                       # Interactive provisioning mode"
+    echo "  $0                       # Auto-detect and setup (recommended)"
     echo "  $0 --check               # Check resource existence only"
-    echo "  $0 --configure-workshop  # Configure VM + save AI Foundry creds (recommended)"
-    echo "  $0 --configure-vm        # Configure VM only"
-    echo "  $0 --save-aifoundry-creds  # Save AI Foundry credentials only"
+    echo "  $0 --configure-workshop  # Re-configure workshop (interactive prompts)"
+    echo ""
+}
+
+# =============================================================================
+# Run Workshop Configuration (non-interactive - uses global variables)
+# =============================================================================
+
+run_workshop_configuration() {
+    print_header "Configuring Workshop Environment"
+
+    echo ""
+    echo "This will perform the following steps:"
+    echo "  1. Configure VM with workshop repository, Docker, and start monolith app"
+    echo "  2. Save AI Foundry credentials to workshop-credentials.json"
+    echo "  3. Update Travel Advisor manifest with AI Foundry and OTEL credentials"
+    echo ""
+
+    # Use defaults
+    DEFAULT_CREDS_FILE="../gen/workshop-credentials.json"
+
+    # Step 1: Configure VM
+    echo "=========================================="
+    echo "Step 1: Configuring VM"
+    echo "=========================================="
+    configure_vm_workshop "$VM_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION"
+
+    # Step 2: Save AI Foundry Credentials (also updates Travel Advisor manifest)
+    echo ""
+    echo "=========================================="
+    echo "Step 2: Saving AI Foundry Credentials"
+    echo "=========================================="
+    save_aifoundry_credentials "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION" "$DEFAULT_CREDS_FILE"
+
+    echo ""
+    print_header "Workshop Configuration Complete"
+    echo ""
+    echo "Summary:"
+    echo "  - VM configured with workshop repository and Docker"
+    echo "  - Monolith application started"
+    echo "  - Port 80 opened for web traffic"
+    echo "  - AI Foundry credentials saved to: $DEFAULT_CREDS_FILE"
+    echo "  - Travel Advisor manifest updated with credentials"
+    echo ""
+}
+
+# =============================================================================
+# Quick Check Resources with Defaults (no user input)
+# =============================================================================
+
+quick_check_resources_with_defaults() {
+    # Set defaults
+    AZURE_SUBSCRIPTION=$(az account show --query id --output tsv 2>/dev/null)
+    AZURE_RESOURCE_GROUP="$DEFAULT_RESOURCE_GROUP"
+    VM_NAME="$DEFAULT_VM_NAME"
+    AKS_CLUSTER_NAME="$DEFAULT_AKS_CLUSTER_NAME"
+    AIFOUNDRY_NAME="$DEFAULT_AIFOUNDRY_NAME"
+
+    print_header "Checking for Existing Workshop Resources"
+    echo ""
+    echo "Using default resource names:"
+    echo "  Resource Group: $AZURE_RESOURCE_GROUP"
+    echo "  VM:             $VM_NAME"
+    echo "  AKS Cluster:    $AKS_CLUSTER_NAME"
+    echo "  AI Foundry:     $AIFOUNDRY_NAME"
+    echo ""
+
+    # Check Resource Group
+    echo -n "Resource Group [$AZURE_RESOURCE_GROUP]: "
+    if [ "$(check_resource_group_exists "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
+        print_success "EXISTS"
+        RG_EXISTS=true
+    else
+        print_warning "NOT FOUND"
+        RG_EXISTS=false
+    fi
+
+    # Check VM
+    echo -n "Virtual Machine [$VM_NAME]: "
+    if [ "$RG_EXISTS" == "true" ]; then
+        if [ "$(check_vm_exists "$VM_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
+            print_success "EXISTS"
+            VM_EXISTS=true
+        else
+            print_warning "NOT FOUND"
+            VM_EXISTS=false
+        fi
+    else
+        print_info "SKIPPED (Resource Group doesn't exist)"
+        VM_EXISTS=false
+    fi
+
+    # Check AKS Cluster
+    echo -n "AKS Cluster [$AKS_CLUSTER_NAME]: "
+    if [ "$RG_EXISTS" == "true" ]; then
+        if [ "$(check_aks_exists "$AKS_CLUSTER_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
+            print_success "EXISTS"
+            AKS_EXISTS=true
+        else
+            print_warning "NOT FOUND"
+            AKS_EXISTS=false
+        fi
+    else
+        print_info "SKIPPED (Resource Group doesn't exist)"
+        AKS_EXISTS=false
+    fi
+
+    # Check AI Foundry
+    echo -n "AI Foundry [$AIFOUNDRY_NAME]: "
+    if [ "$RG_EXISTS" == "true" ]; then
+        if [ "$(check_aifoundry_exists "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
+            print_success "EXISTS"
+            AIFOUNDRY_EXISTS=true
+        else
+            print_warning "NOT FOUND"
+            AIFOUNDRY_EXISTS=false
+        fi
+    else
+        print_info "SKIPPED (Resource Group doesn't exist)"
+        AIFOUNDRY_EXISTS=false
+    fi
+
     echo ""
 }
 
@@ -1164,7 +1285,7 @@ main() {
             exit 0
             ;;
         "")
-            # Interactive provisioning mode
+            # Auto-detect mode - check resources first, then decide
             ;;
         *)
             echo "Unknown option: $1"
@@ -1173,28 +1294,62 @@ main() {
             ;;
     esac
 
-    # Gather inputs interactively
-    gather_inputs
+    # =========================================================================
+    # AUTO-DETECT MODE: Check if resources exist with defaults first
+    # =========================================================================
 
-    # Check current resource status
-    check_all_resources_status
+    print_header "Azure Workshop Setup Script"
+    echo ""
+    echo "This script will:"
+    echo "  - Check if workshop resources already exist"
+    echo "  - If resources exist: Configure VM and save credentials"
+    echo "  - If resources don't exist: Create them, then configure"
+    echo ""
 
-    # If ALL resources already exist, skip provisioning and just show summary
+    # Quick check with defaults (no user input needed)
+    quick_check_resources_with_defaults
+
+    # =========================================================================
+    # SCENARIO 1: All resources exist - just run configuration
+    # =========================================================================
     if [ "$RG_EXISTS" == "true" ] && [ "$VM_EXISTS" == "true" ] && [ "$AKS_EXISTS" == "true" ] && [ "$AIFOUNDRY_EXISTS" == "true" ]; then
         print_header "All Resources Already Exist"
         echo ""
-        print_success "All resources are already provisioned. No action needed."
+        print_success "All Azure resources are already provisioned!"
         echo ""
-        echo "If you need to reconfigure the VM or update credentials, use:"
-        echo "  ./setup-azure-workshop.sh --configure-workshop"
+        echo "Proceeding to configure the workshop environment..."
         echo ""
+
+        read -p "Continue with workshop configuration? (y/n): " CONFIRM
+        if [ "$CONFIRM" != "y" ]; then
+            echo "Setup cancelled."
+            exit 0
+        fi
+
+        # Run configuration with defaults
+        run_workshop_configuration
 
         # Print final summary
         print_summary
         exit 0
     fi
 
-    # Register required resource providers (only if we need to create something)
+    # =========================================================================
+    # SCENARIO 2: Some or all resources missing - need to provision first
+    # =========================================================================
+    print_header "Resources Need to be Provisioned"
+    echo ""
+    echo "Some or all workshop resources need to be created."
+    echo "Please provide the required inputs:"
+    echo "-------------------------------------------------------------------"
+
+    # Gather inputs for provisioning
+    gather_inputs
+
+    # Re-check resources with user-provided inputs
+    check_all_resources_status
+
+    # Register required resource providers
     register_resource_providers
 
     # Create resources
@@ -1214,8 +1369,29 @@ main() {
 
     create_ai_foundry
 
-    # Print final summary
+    # Print provisioning summary
     print_summary
+
+    # =========================================================================
+    # After provisioning, automatically run workshop configuration
+    # =========================================================================
+    echo ""
+    print_header "Provisioning Complete - Starting Workshop Configuration"
+    echo ""
+    echo "Now configuring the workshop environment..."
+    echo ""
+
+    # Run configuration
+    run_workshop_configuration
+
+    echo ""
+    print_header "Workshop Setup Complete!"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Access your VM at: http://$VM_IP"
+    echo "  2. SSH to VM: ssh workshop@$VM_IP (password: Workshop123#)"
+    echo "  3. Deploy K8s apps: cd app-scripts && ./start-k8.sh"
+    echo ""
 }
 
 # Run main function
