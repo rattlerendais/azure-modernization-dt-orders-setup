@@ -20,24 +20,19 @@ echo "Configuring AKS cluster credentials..."
 echo "=========================================================="
 echo "Resource Group: $AZURE_RESOURCE_GROUP"
 echo "AKS Cluster:    $AZURE_AKS_CLUSTER_NAME"
-echo ""
 
 # Get AKS credentials
-echo "Running: az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AZURE_AKS_CLUSTER_NAME --overwrite-existing"
-if ! az aks get-credentials --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_AKS_CLUSTER_NAME" --overwrite-existing 2>/dev/null; then
+if ! az aks get-credentials --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_AKS_CLUSTER_NAME" --overwrite-existing &>/dev/null; then
     echo ""
     echo "ERROR: Failed to get AKS credentials."
     echo "Please verify:"
     echo "  - Resource group '$AZURE_RESOURCE_GROUP' exists"
     echo "  - AKS cluster '$AZURE_AKS_CLUSTER_NAME' exists in that resource group"
     echo "  - You are logged into Azure CLI (run 'az login' if needed)"
-    echo ""
     exit 1
 fi
 
 # Verify connectivity
-echo ""
-echo "Verifying cluster connectivity..."
 if ! kubectl cluster-info &>/dev/null; then
     echo "ERROR: Cannot connect to Kubernetes cluster after getting credentials."
     exit 1
@@ -45,99 +40,93 @@ fi
 echo "Connected to AKS cluster successfully."
 echo ""
 
+# ==========================================================
+# App #1 - Hipster Shop
+# ==========================================================
 echo "=========================================================="
-echo "Starting app on k8"
+echo "Deploying App #1 - Hipster Shop"
 echo "=========================================================="
+./start-k8-hipstershop.sh 2>/dev/null
+echo "Hipster Shop deployment initiated."
+echo ""
 
+# ==========================================================
+# App #2 - DT Orders
+# ==========================================================
 echo "=========================================================="
-echo "Start App #1 - Hipster shop"
+echo "Deploying App #2 - DT Orders"
 echo "=========================================================="
-./start-k8-hipstershop.sh
+kubectl create ns staging 2>/dev/null || true
+kubectl create -f manifests/dynatrace-oneagent-metadata-viewer.yaml 2>/dev/null || true
+kubectl -n staging apply -f manifests/catalog-service.yml -o name 2>/dev/null
+kubectl -n staging apply -f manifests/customer-service.yml -o name 2>/dev/null
+kubectl -n staging apply -f manifests/order-service.yml -o name 2>/dev/null
+kubectl -n staging apply -f manifests/frontend.yml -o name 2>/dev/null
+kubectl -n staging apply -f manifests/browser-traffic.yml -o name 2>/dev/null
+kubectl -n staging apply -f manifests/load-traffic.yml -o name 2>/dev/null
+echo "DT Orders deployment initiated."
 
-
-echo "=========================================================="
-echo "Start App#2 - DT Orders"
-echo "=========================================================="
-
-echo "----------------------------------------------------------"
-echo "kubectl create namespace staging"
-echo "----------------------------------------------------------"
-kubectl create ns staging
-
-echo "----------------------------------------------------------"
-echo "kubectl create -f manifests/dynatrace-oneagent-metadata-viewer.yaml"
-echo "----------------------------------------------------------"
-kubectl create -f manifests/dynatrace-oneagent-metadata-viewer.yaml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging apply -f catalog-service.yml"
-echo "----------------------------------------------------------"
-kubectl -n staging apply -f manifests/catalog-service.yml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging apply -f manifests/customer-service.yml"
-echo "----------------------------------------------------------"
-kubectl -n staging apply -f manifests/customer-service.yml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging apply -f manifests/order-service.yml"
-echo "----------------------------------------------------------"
-kubectl -n staging apply -f manifests/order-service.yml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging apply -f manifests/frontend.yml"
-echo "----------------------------------------------------------"
-kubectl -n staging apply -f manifests/frontend.yml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging apply -f manifests/browser-traffic.yml"
-echo "----------------------------------------------------------"
-kubectl -n staging apply -f manifests/browser-traffic.yml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging apply -f manifests/load-traffic.yml"
-echo "----------------------------------------------------------"
-kubectl -n staging apply -f manifests/load-traffic.yml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n staging get pods"
-echo "----------------------------------------------------------"
-sleep 5
-kubectl -n staging get pods
-POD_NAMES=$(kubectl -n staging get pods --no-headers -o custom-columns=":metadata.name")
+# Send event for DT Orders
+POD_NAMES=$(kubectl -n staging get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
 PROVISIONING_STEP="11-Provisioning app on k8-DTOrders"
 JSON_EVENT='{"id":"1","step":"'"$PROVISIONING_STEP"'","event.provider":"azure-workshop-provisioning","event.category":"azure-workshop","user":"'"$EMAIL"'","event.type":"provisioning-step","k8pods-staging":"'"$POD_NAMES"'","DT_ENVIRONMENT_ID":"'"$DT_ENVIRONMENT_ID"'"}'
-DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
+curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
      -H "Content-Type: application/json" \
-     -d "$JSON_EVENT")
+     -d "$JSON_EVENT" > /dev/null 2>&1
+echo ""
 
+# ==========================================================
+# App #3 - Travel Advisor
+# ==========================================================
 echo "=========================================================="
-echo "Start App #3 - Travel Advisor (Azure OpenAI)"
+echo "Deploying App #3 - Travel Advisor (Azure OpenAI)"
 echo "=========================================================="
+kubectl apply -f manifests/traveladvisor-combined.yaml -o name 2>/dev/null
+echo "Travel Advisor deployment initiated."
 
-echo "----------------------------------------------------------"
-echo "kubectl apply -f manifests/traveladvisor-combined.yaml"
-echo "----------------------------------------------------------"
-kubectl apply -f manifests/traveladvisor-combined.yaml
-
-echo "----------------------------------------------------------"
-echo "kubectl -n travel-advisor-azure-openai-sample get pods"
-echo "----------------------------------------------------------"
-sleep 5
-kubectl -n travel-advisor-azure-openai-sample get pods
-
-echo "----------------------------------------------------------"
-echo "kubectl -n travel-advisor-azure-openai-sample get svc"
-echo "----------------------------------------------------------"
-kubectl -n travel-advisor-azure-openai-sample get svc
-
+# Send event for Travel Advisor
 TRAVELADVISOR_POD_NAMES=$(kubectl -n travel-advisor-azure-openai-sample get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
 PROVISIONING_STEP="12-Provisioning app on k8-TravelAdvisor"
 JSON_EVENT='{"id":"1","step":"'"$PROVISIONING_STEP"'","event.provider":"azure-workshop-provisioning","event.category":"azure-workshop","user":"'"$EMAIL"'","event.type":"provisioning-step","k8pods-traveladvisor":"'"$TRAVELADVISOR_POD_NAMES"'","DT_ENVIRONMENT_ID":"'"$DT_ENVIRONMENT_ID"'"}'
-DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
+curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
      -H "Content-Type: application/json" \
-     -d "$JSON_EVENT")
+     -d "$JSON_EVENT" > /dev/null 2>&1
+echo ""
 
+# ==========================================================
+# Wait for pods to start and show status
+# ==========================================================
 echo "=========================================================="
-echo "All Kubernetes apps deployed!"
+echo "Waiting for pods to initialize..."
 echo "=========================================================="
+sleep 10
+
+echo ""
+echo "=========================================================="
+echo "Pod Status Summary"
+echo "=========================================================="
+
+echo ""
+echo "--- Hipster Shop (namespace: hipster-shop) ---"
+kubectl -n hipster-shop get pods 2>/dev/null || echo "Namespace not found or no pods yet"
+
+echo ""
+echo "--- DT Orders (namespace: staging) ---"
+kubectl -n staging get pods 2>/dev/null || echo "Namespace not found or no pods yet"
+
+echo ""
+echo "--- Travel Advisor (namespace: travel-advisor-azure-openai-sample) ---"
+kubectl -n travel-advisor-azure-openai-sample get pods 2>/dev/null || echo "Namespace not found or no pods yet"
+
+echo ""
+echo "=========================================================="
+echo "Deployment Complete!"
+echo "=========================================================="
+echo ""
+echo "NOTE: If any pods are not in 'Running' status, wait a few"
+echo "      minutes and re-run this script or check pod status with:"
+echo ""
+echo "      kubectl -n hipster-shop get pods"
+echo "      kubectl -n staging get pods"
+echo "      kubectl -n travel-advisor-azure-openai-sample get pods"
+echo ""
