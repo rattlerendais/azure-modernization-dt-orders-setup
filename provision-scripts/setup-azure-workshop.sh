@@ -126,11 +126,15 @@ gather_inputs() {
     EMAIL=$(az account show --query user.name --output tsv 2>/dev/null)
     EMAIL=$(echo $EMAIL | cut -d'#' -f 2)
 
-    # Optional: Dynatrace event tracking
-    echo ""
-    echo "Optional: Dynatrace Event Tracking (press Enter to skip)"
-    read -p "Dynatrace Environment ID (e.g., abc12345): " DT_ENV_INPUT
-    DT_ENVIRONMENT_ID=${DT_ENV_INPUT:-""}
+    # Load Dynatrace credentials from workshop-credentials.json if available
+    CREDS_FILE="../gen/workshop-credentials.json"
+    if [ -f "$CREDS_FILE" ]; then
+        DT_ENVIRONMENT_ID=$(cat "$CREDS_FILE" | jq -r '.DT_ENVIRONMENT_ID // empty')
+        if [ -n "$DT_ENVIRONMENT_ID" ]; then
+            echo ""
+            print_info "Loaded Dynatrace Environment ID from $CREDS_FILE"
+        fi
+    fi
 
     echo ""
     echo "-------------------------------------------------------------------"
@@ -1189,6 +1193,19 @@ quick_check_resources_with_defaults() {
     VM_NAME="$DEFAULT_VM_NAME"
     AKS_CLUSTER_NAME="$DEFAULT_AKS_CLUSTER_NAME"
     AIFOUNDRY_NAME="$DEFAULT_AIFOUNDRY_NAME"
+
+    # Load Dynatrace credentials from workshop-credentials.json if available
+    CREDS_FILE="../gen/workshop-credentials.json"
+    if [ -f "$CREDS_FILE" ]; then
+        DT_ENVIRONMENT_ID=$(cat "$CREDS_FILE" | jq -r '.DT_ENVIRONMENT_ID // empty')
+        EMAIL=$(cat "$CREDS_FILE" | jq -r '.EMAIL // empty')
+    fi
+
+    # Derive email from Azure CLI if not loaded from creds file
+    if [ -z "$EMAIL" ]; then
+        EMAIL=$(az account show --query user.name --output tsv 2>/dev/null)
+        EMAIL=$(echo $EMAIL | cut -d'#' -f 2)
+    fi
 
     print_header "Checking for Existing Workshop Resources"
     echo ""
