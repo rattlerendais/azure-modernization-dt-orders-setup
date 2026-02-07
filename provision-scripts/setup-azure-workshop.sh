@@ -1404,11 +1404,6 @@ main() {
     echo ""
     print_header "Workshop Setup Complete!"
     echo ""
-    echo "Next steps:"
-    echo "  1. Access your VM at: http://$VM_IP"
-    echo "  2. SSH to VM: ssh workshop@$VM_IP (password: Workshop123#)"
-    echo "  3. Deploy K8s apps: cd app-scripts && ./start-k8.sh"
-    echo ""
 }
 
 # Run main function
