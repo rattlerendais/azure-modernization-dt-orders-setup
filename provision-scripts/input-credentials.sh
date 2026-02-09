@@ -1,11 +1,29 @@
 #!/bin/bash
 
 YLW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 PROVISIONING_STEP="01-Input-credentials"
 
 CREDS_TEMPLATE_FILE="./workshop-credentials.template"
 CREDS_FILE="../gen/workshop-credentials.json"
+
+# Dynatrace Event Tracking
+DT_EVENT_ENDPOINT="https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event"
+
+# Send event to Dynatrace (called after we have EMAIL and DT_ENVIRONMENT_ID)
+send_dt_event() {
+    local step=$1
+    local extra_data=${2:-""}
+
+    # Only send if both EMAIL and DT_ENVIRONMENT_ID are set
+    if [ -n "$EMAIL" ] && [ -n "$DT_ENVIRONMENT_ID" ]; then
+        local JSON_EVENT='{"id":"1","step":"'"$step"'","event.provider":"azure-workshop-provisioning","event.category":"azure-workshop","user":"'"$EMAIL"'","event.type":"provisioning-step"'"$extra_data"',"DT_ENVIRONMENT_ID":"'"$DT_ENVIRONMENT_ID"'"}'
+        curl -s -X POST "$DT_EVENT_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_EVENT" > /dev/null 2>&1
+    fi
+}
 
 
 
@@ -71,6 +89,10 @@ AZURE_AIFOUNDRY_MODEL_KEY=""
 EMAIL=$(az account show --query user.name --output tsv)
 EMAIL=$(echo $EMAIL | cut -d'#' -f 2)
 
+# Initialize generation flags
+DT_GEN2=false
+DT_GEN3=false
+
 # pull out the DT_ENVIRONMENT_ID. DT_BASEURL will be one of these patterns
 if [[ $(echo $DT_BASEURL | grep "/e/" | wc -l) == *"1"* ]]; then
   #echo "Matched pattern: https://{your-domain}/e/{your-environment-id}"
@@ -90,11 +112,22 @@ else
   exit 1
 fi
 
+# Always set the live URL (used for API calls)
+DT_BASEURL_LIVE="https://$DT_ENVIRONMENT_ID.live.dynatrace.com"
+
+# Set generation-specific URLs
 if $DT_GEN2 ; then
-   DT_BASEURL_GEN2="https://$DT_ENVIRONMENT_ID.live.dynatrace.com"
+   DT_BASEURL_GEN2="$DT_BASEURL_LIVE"
 fi
 if $DT_GEN3 ; then
    DT_BASEURL_GEN3="https://$DT_ENVIRONMENT_ID.apps.dynatrace.com"
+   # For Gen3, also set Gen2 URL for API compatibility
+   DT_BASEURL_GEN2="$DT_BASEURL_LIVE"
+fi
+
+# Fallback for managed/sprint environments
+if [ -z "$DT_BASEURL_GEN2" ]; then
+   DT_BASEURL_GEN2="$DT_BASEURL_LIVE"
 fi
 
 #remove trailing / if the have it
@@ -103,9 +136,38 @@ if [ "${DT_BASEURL: -1}" == "/" ]; then
   DT_BASEURL="$(echo ${DT_BASEURL%?})"
 fi
 
+# Create workshop API token with required scopes
+echo "Creating Dynatrace workshop API token..."
 DT_TOKEN=$(curl --silent -X POST "https://$DT_ENVIRONMENT_ID.live.dynatrace.com/api/v2/apiTokens" -H "accept: application/json; charset=utf-8" -H "Content-Type: application/json; charset=utf-8" -d "{\"scopes\":[\"slo.read\",\"slo.write\",\"settings.read\",\"events.read\",\"events.ingest\",\"settings.write\",\"ReadConfig\",\"WriteConfig\",\"activeGateTokenManagement.create\",\"metrics.ingest\",\"logs.ingest\",\"entities.read\",\"DataExport\",\"openTelemetryTrace.ingest\",\"InstallerDownload\",\"SupportAlert\"],\"name\":\"azure-workshop-auto\"}" -H "Authorization: Api-Token $DT_ACCESS_API_TOKEN")
 
-DT_WORKSHOP_TOKEN=$(echo $DT_TOKEN | jq -r .token)
+DT_WORKSHOP_TOKEN=$(echo $DT_TOKEN | jq -r '.token // empty')
+
+# Check if token creation was successful
+if [ -z "$DT_WORKSHOP_TOKEN" ] || [ "$DT_WORKSHOP_TOKEN" == "null" ]; then
+    echo ""
+    echo -e "${RED}WARNING: Failed to create Dynatrace API token.${NC}"
+    ERROR_MSG=$(echo $DT_TOKEN | jq -r '.error.message // .message // "Unknown error"')
+    echo "Error response: $ERROR_MSG"
+    echo ""
+    echo "Please verify:"
+    echo "  1. Your Access API Token has 'apiTokens.write' scope"
+    echo "  2. The Dynatrace Base URL is correct"
+    echo "  3. Your Access API Token is valid and not expired"
+    echo ""
+
+    # Send failure event to DT
+    send_dt_event "01-Input-credentials-TOKEN-FAILED" ',"status":"Token creation failed","error":"'"$ERROR_MSG"'"'
+
+    read -p "Do you want to continue anyway? (y/n) : " CONTINUE_REPLY
+    if [ "$CONTINUE_REPLY" != "y" ]; then
+        echo "Exiting. Please fix the token and try again."
+        exit 1
+    fi
+    DT_WORKSHOP_TOKEN="TOKEN_CREATION_FAILED"
+else
+    # Send success event for token creation
+    send_dt_event "01-Input-credentials-TOKEN-SUCCESS" ',"status":"Token created successfully"'
+fi
 
 JSON_EVENT=$(cat <<EOF
 {
@@ -164,16 +226,20 @@ cat $CREDS_TEMPLATE_FILE | \
   sed 's~AZURE_AIFOUNDRY_MODEL_KEY_PLACEHOLDER~'"$AZURE_AIFOUNDRY_MODEL_KEY"'~' > $CREDS_FILE
 
 echo "Saved credential to: $CREDS_FILE"
+
+# Send credentials saved event
+send_dt_event "01-Input-credentials-SAVED" ',"status":"Credentials saved successfully"'
+
 echo " "
 echo " "
 echo "========================================================================================================"
-echo -e "${YLW}***** Please save the values below in a notepad for Lab2 when we install the Dynatrace Operator on AKS Cluster ***** ${NC}"
+echo -e "${YLW}***** Please save the values below in a notepad for Lab3 when we install the Dynatrace Operator on AKS Cluster ***** ${NC}"
 echo "--------------------------------------------------------------------------------------"
 echo "Dynatrace Operator & Data Ingest Token 	:	$DT_WORKSHOP_TOKEN"
 echo "API URL for Dynatrace Tenant	     	:	https://$DT_ENVIRONMENT_ID.live.dynatrace.com/api"
 echo "========================================================================================================="
 
-
+# Send final completion event (using legacy format for backwards compatibility)
 DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
      -H "Content-Type: application/json" \
      -d "$JSON_EVENT")
