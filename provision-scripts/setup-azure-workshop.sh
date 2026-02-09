@@ -996,6 +996,126 @@ save_aifoundry_creds_mode() {
 }
 
 # =============================================================================
+# Configure Dynatrace Settings via API
+# =============================================================================
+
+configure_dynatrace_settings() {
+    local creds_file=$1
+
+    print_header "Configuring Dynatrace Environment Settings"
+
+    # Load credentials
+    if [ ! -f "$creds_file" ]; then
+        print_warning "Credentials file not found: $creds_file"
+        print_warning "Skipping Dynatrace settings configuration"
+        return 1
+    fi
+
+    local dt_environment_id=$(cat "$creds_file" | jq -r '.DT_ENVIRONMENT_ID // empty')
+    local dt_api_token=$(cat "$creds_file" | jq -r '.DT_API_TOKEN // empty')
+
+    if [ -z "$dt_environment_id" ] || [ -z "$dt_api_token" ]; then
+        print_warning "DT_ENVIRONMENT_ID or DT_API_TOKEN not found in credentials file"
+        print_warning "Skipping Dynatrace settings configuration"
+        return 1
+    fi
+
+    local dt_api_url="https://${dt_environment_id}.live.dynatrace.com/api/v2/settings/objects"
+
+    # -------------------------------------------------------------------------
+    # Enable New Kubernetes Experience
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "Enabling New Kubernetes Experience..."
+
+    K8S_RESPONSE=$(curl -s -X POST "$dt_api_url" \
+        -H "Authorization: Api-Token $dt_api_token" \
+        -H "Content-Type: application/json" \
+        -d '[{
+            "schemaId": "builtin:app-transition.kubernetes",
+            "scope": "environment",
+            "value": {
+                "kubernetesAppOptions": {
+                    "enableKubernetesApp": true
+                }
+            }
+        }]')
+
+    if echo "$K8S_RESPONSE" | grep -q '"code":200\|"code":201\|objectId'; then
+        print_success "New Kubernetes Experience enabled"
+    else
+        # Check if already enabled (common response)
+        if echo "$K8S_RESPONSE" | grep -q "already exists\|constraint-violation"; then
+            print_info "New Kubernetes Experience already enabled or constraint exists"
+        else
+            print_warning "Could not enable New Kubernetes Experience"
+            echo "  Response: $(echo "$K8S_RESPONSE" | jq -r '.error.message // .message // .' 2>/dev/null | head -1)"
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Enable Third-Party Vulnerability Analytics
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "Enabling Third-Party Vulnerability Analytics..."
+
+    TPV_RESPONSE=$(curl -s -X POST "$dt_api_url" \
+        -H "Authorization: Api-Token $dt_api_token" \
+        -H "Content-Type: application/json" \
+        -d '[{
+            "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+            "scope": "environment",
+            "value": {
+                "enableRuntimeVulnerabilityDetection": true,
+                "globalMonitoringModeTPV": "MONITORING_ON"
+            }
+        }]')
+
+    if echo "$TPV_RESPONSE" | grep -q '"code":200\|"code":201\|objectId'; then
+        print_success "Third-Party Vulnerability Analytics enabled"
+    else
+        if echo "$TPV_RESPONSE" | grep -q "already exists\|constraint-violation"; then
+            print_info "Third-Party Vulnerability Analytics already enabled or constraint exists"
+        else
+            print_warning "Could not enable Third-Party Vulnerability Analytics"
+            echo "  Response: $(echo "$TPV_RESPONSE" | jq -r '.error.message // .message // .' 2>/dev/null | head -1)"
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Enable Code-Level Vulnerability Analytics
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "Enabling Code-Level Vulnerability Analytics..."
+
+    CLV_RESPONSE=$(curl -s -X POST "$dt_api_url" \
+        -H "Authorization: Api-Token $dt_api_token" \
+        -H "Content-Type: application/json" \
+        -d '[{
+            "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+            "scope": "environment",
+            "value": {
+                "enableCodeLevelVulnerabilityDetection": true
+            }
+        }]')
+
+    if echo "$CLV_RESPONSE" | grep -q '"code":200\|"code":201\|objectId'; then
+        print_success "Code-Level Vulnerability Analytics enabled"
+    else
+        if echo "$CLV_RESPONSE" | grep -q "already exists\|constraint-violation"; then
+            print_info "Code-Level Vulnerability Analytics already enabled or constraint exists"
+        else
+            print_warning "Could not enable Code-Level Vulnerability Analytics"
+            echo "  Response: $(echo "$CLV_RESPONSE" | jq -r '.error.message // .message // .' 2>/dev/null | head -1)"
+        fi
+    fi
+
+    echo ""
+    print_success "Dynatrace settings configuration completed"
+    send_dt_event "10-Configure-DT-Settings" ',"status":"Dynatrace settings configured"'
+}
+
+# =============================================================================
 # Combined Workshop Configuration (VM + AI Foundry Credentials)
 # =============================================================================
 
@@ -1006,6 +1126,7 @@ configure_workshop_mode() {
     echo "This will perform the following steps:"
     echo "  1. Configure VM with workshop repository and open port 80"
     echo "  2. Save AI Foundry credentials to workshop-credentials.json"
+    echo "  3. Configure Dynatrace settings (K8s experience, vulnerability analytics)"
     echo "-------------------------------------------------------------------"
 
     # Get Azure Subscription ID
@@ -1062,6 +1183,13 @@ configure_workshop_mode() {
     echo "=========================================="
     save_aifoundry_credentials "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION" "$CREDS_FILE"
 
+    # Step 3: Configure Dynatrace Settings
+    echo ""
+    echo "=========================================="
+    echo "Step 3: Configuring Dynatrace Settings"
+    echo "=========================================="
+    configure_dynatrace_settings "$CREDS_FILE"
+
     echo ""
     print_header "Workshop Configuration Complete"
     echo ""
@@ -1069,6 +1197,9 @@ configure_workshop_mode() {
     echo "  - VM configured with workshop repository"
     echo "  - Port 80 opened for web traffic"
     echo "  - AI Foundry credentials saved to: $CREDS_FILE"
+    echo "  - Dynatrace: New Kubernetes Experience enabled"
+    echo "  - Dynatrace: Third-Party Vulnerability Analytics enabled"
+    echo "  - Dynatrace: Code-Level Vulnerability Analytics enabled"
     echo ""
 }
 
@@ -1266,6 +1397,7 @@ run_workshop_configuration() {
     echo "  1. Configure VM with workshop repository, Docker, and start monolith app"
     echo "  2. Save AI Foundry credentials to workshop-credentials.json"
     echo "  3. Update Travel Advisor manifest with AI Foundry and OTEL credentials"
+    echo "  4. Configure Dynatrace settings (K8s experience, vulnerability analytics)"
     echo ""
 
     # Use defaults
@@ -1284,6 +1416,13 @@ run_workshop_configuration() {
     echo "=========================================="
     save_aifoundry_credentials "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION" "$DEFAULT_CREDS_FILE"
 
+    # Step 3: Configure Dynatrace Settings
+    echo ""
+    echo "=========================================="
+    echo "Step 3: Configuring Dynatrace Settings"
+    echo "=========================================="
+    configure_dynatrace_settings "$DEFAULT_CREDS_FILE"
+
     echo ""
     print_header "Workshop Configuration Complete"
     echo ""
@@ -1293,6 +1432,8 @@ run_workshop_configuration() {
     echo "  - Port 80 opened for web traffic"
     echo "  - AI Foundry credentials saved to: $DEFAULT_CREDS_FILE"
     echo "  - Travel Advisor manifest updated with credentials"
+    echo "  - Dynatrace: New Kubernetes Experience enabled"
+    echo "  - Dynatrace: Vulnerability Analytics enabled"
     echo ""
 }
 
