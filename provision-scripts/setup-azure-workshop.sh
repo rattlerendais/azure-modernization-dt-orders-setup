@@ -219,6 +219,60 @@ check_aifoundry_exists() {
     fi
 }
 
+# Tag update functions - ensure Owner tag exists on resources
+WORKSHOP_TAG="Owner=dynatrace-azure-workshop"
+
+ensure_resource_group_tags() {
+    local rg_name=$1
+    local subscription=$2
+
+    # Check if Owner tag exists
+    CURRENT_TAG=$(az group show --name "$rg_name" --subscription "$subscription" --query "tags.Owner" --output tsv 2>/dev/null)
+    if [ "$CURRENT_TAG" != "dynatrace-azure-workshop" ]; then
+        echo "  Adding tag to Resource Group..."
+        az group update --name "$rg_name" --subscription "$subscription" --tags "$WORKSHOP_TAG" --output none 2>/dev/null
+    fi
+}
+
+ensure_vm_tags() {
+    local vm_name=$1
+    local rg_name=$2
+    local subscription=$3
+
+    # Check if Owner tag exists
+    CURRENT_TAG=$(az vm show --name "$vm_name" --resource-group "$rg_name" --subscription "$subscription" --query "tags.Owner" --output tsv 2>/dev/null)
+    if [ "$CURRENT_TAG" != "dynatrace-azure-workshop" ]; then
+        echo "  Adding tag to Virtual Machine..."
+        az vm update --name "$vm_name" --resource-group "$rg_name" --subscription "$subscription" --set tags.Owner="dynatrace-azure-workshop" --output none 2>/dev/null
+    fi
+}
+
+ensure_aks_tags() {
+    local aks_name=$1
+    local rg_name=$2
+    local subscription=$3
+
+    # Check if Owner tag exists
+    CURRENT_TAG=$(az aks show --name "$aks_name" --resource-group "$rg_name" --subscription "$subscription" --query "tags.Owner" --output tsv 2>/dev/null)
+    if [ "$CURRENT_TAG" != "dynatrace-azure-workshop" ]; then
+        echo "  Adding tag to AKS Cluster..."
+        az aks update --name "$aks_name" --resource-group "$rg_name" --subscription "$subscription" --tags "$WORKSHOP_TAG" --output none 2>/dev/null
+    fi
+}
+
+ensure_aifoundry_tags() {
+    local account_name=$1
+    local rg_name=$2
+    local subscription=$3
+
+    # Check if Owner tag exists
+    CURRENT_TAG=$(az cognitiveservices account show --name "$account_name" --resource-group "$rg_name" --subscription "$subscription" --query "tags.Owner" --output tsv 2>/dev/null)
+    if [ "$CURRENT_TAG" != "dynatrace-azure-workshop" ]; then
+        echo "  Adding tag to AI Foundry..."
+        az cognitiveservices account update --name "$account_name" --resource-group "$rg_name" --subscription "$subscription" --tags "$WORKSHOP_TAG" --output none 2>/dev/null
+    fi
+}
+
 # =============================================================================
 # Resource Status Check (Check Only Mode)
 # =============================================================================
@@ -285,6 +339,9 @@ check_all_resources_status() {
     fi
 
     echo ""
+
+    # Send DT event with resource status summary
+    send_dt_event "00-Check-resources-status" ',"resourceGroup.exists":"'"$RG_EXISTS"'","vm.exists":"'"$VM_EXISTS"'","aks.exists":"'"$AKS_EXISTS"'","aifoundry.exists":"'"$AIFOUNDRY_EXISTS"'"'
 }
 
 # =============================================================================
@@ -327,6 +384,7 @@ create_resource_group() {
 
     if [ "$(check_resource_group_exists "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
         print_warning "Resource Group already exists. Skipping creation."
+        ensure_resource_group_tags "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION"
         send_dt_event "02-Create-resource-group" ',"status":"Already exists"'
         return 0
     fi
@@ -336,7 +394,7 @@ create_resource_group() {
         --name "$AZURE_RESOURCE_GROUP" \
         --location "$AZURE_LOCATION" \
         --subscription "$AZURE_SUBSCRIPTION" \
-        --tags "CreatedBy=provision-azure-resources" \
+        --tags "Owner=dynatrace-azure-workshop" \
         --output none 2>/dev/null
 
     if [ $? -eq 0 ]; then
@@ -354,6 +412,7 @@ create_virtual_machine() {
 
     if [ "$(check_vm_exists "$VM_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
         print_warning "Virtual Machine already exists. Skipping creation."
+        ensure_vm_tags "$VM_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION"
         send_dt_event "03-Provision-VM" ',"vmState":"Already exists"'
         return 0
     fi
@@ -381,7 +440,7 @@ create_virtual_machine() {
         --subnet "${VM_NAME}-subnet" \
         --nsg "${VM_NAME}-nsg" \
         --public-ip-address "${VM_NAME}-ip" \
-        --tags "Owner=azure-modernize-workshop" \
+        --tags "Owner=dynatrace-azure-workshop" \
         --output json 2>&1)
 
     # Filter out WARNING/ERROR lines before parsing JSON with jq
@@ -427,6 +486,7 @@ create_aks_cluster() {
 
     if [ "$(check_aks_exists "$AKS_CLUSTER_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
         print_warning "AKS Cluster already exists. Skipping creation."
+        ensure_aks_tags "$AKS_CLUSTER_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION"
         send_dt_event "04-Create-AKS-cluster" ',"status":"Already exists"'
         return 0
     fi
@@ -447,7 +507,7 @@ create_aks_cluster() {
         --os-sku AzureLinux \
         --enable-addons monitoring \
         --generate-ssh-keys \
-        --tags "CreatedBy=provision-azure-resources" \
+        --tags "Owner=dynatrace-azure-workshop" \
         --output none 2>/dev/null
 
     if [ $? -eq 0 ]; then
@@ -472,6 +532,7 @@ create_ai_foundry() {
 
     if [ "$(check_aifoundry_exists "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
         print_warning "AI Foundry account already exists. Skipping creation."
+        ensure_aifoundry_tags "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION"
         send_dt_event "05-Provision-AI-Foundry" ',"status":"Already exists"'
         return 0
     fi
@@ -486,7 +547,7 @@ create_ai_foundry() {
         --sku "S0" \
         --location "$AZURE_LOCATION" \
         --yes \
-        --tags "CreatedBy=provision-azure-resources" \
+        --tags "Owner=dynatrace-azure-workshop" \
         --output json 2>&1)
     AIFOUNDRY_EXIT_CODE=$?
 
@@ -560,6 +621,7 @@ configure_vm_workshop() {
     # Check if VM exists first
     if [ "$(check_vm_exists "$vm_name" "$rg_name" "$subscription")" == "false" ]; then
         print_error "VM '$vm_name' not found in resource group '$rg_name'."
+        send_dt_event "94-Configure-VM-FAILED" ',"status":"VM not found"'
         return 1
     fi
 
@@ -629,9 +691,11 @@ configure_vm_workshop() {
         print_success "VM configured successfully with workshop repository."
         echo ""
         echo "Repository cloned to: /home/workshop/azure-modernization-dt-orders-setup"
+        send_dt_event "07-Configure-VM" ',"status":"Success"'
     else
         print_warning "VM configuration completed. Output:"
         echo "$RESULT"
+        send_dt_event "07-Configure-VM" ',"status":"Completed with warnings"'
     fi
 
     # Open port 80 for web traffic
@@ -706,6 +770,7 @@ save_aifoundry_credentials() {
     # Check if AI Foundry exists
     if [ "$(check_aifoundry_exists "$aifoundry_name" "$rg_name" "$subscription")" == "false" ]; then
         print_error "AI Foundry '$aifoundry_name' not found in resource group '$rg_name'."
+        send_dt_event "95-Save-AIFoundry-credentials-FAILED" ',"status":"AI Foundry not found"'
         return 1
     fi
 
@@ -729,11 +794,13 @@ save_aifoundry_credentials() {
 
     if [ -z "$AZURE_AIFOUNDRY_ENDPOINT" ]; then
         print_error "Could not retrieve AI Foundry endpoint"
+        send_dt_event "95-Save-AIFoundry-credentials-FAILED" ',"status":"Endpoint retrieval failed"'
         return 1
     fi
 
     if [ -z "$AZURE_AIFOUNDRY_MODEL_KEY" ]; then
         print_error "Could not retrieve AI Foundry API key"
+        send_dt_event "95-Save-AIFoundry-credentials-FAILED" ',"status":"API key retrieval failed"'
         return 1
     fi
 
@@ -761,8 +828,10 @@ save_aifoundry_credentials() {
 
     if [ $? -eq 0 ]; then
         print_success "Credentials file updated successfully: $creds_file"
+        send_dt_event "08-Save-AIFoundry-credentials" ',"status":"Success"'
     else
         print_error "Failed to update credentials file"
+        send_dt_event "95-Save-AIFoundry-credentials-FAILED" ',"status":"Credentials file update failed"'
         return 1
     fi
 
@@ -783,6 +852,7 @@ update_traveladvisor_manifest() {
 
     if [ ! -f "$TRAVELADVISOR_MANIFEST" ]; then
         print_warning "Travel Advisor manifest not found at $TRAVELADVISOR_MANIFEST"
+        send_dt_event "96-Update-TravelAdvisor-manifest-FAILED" ',"status":"Manifest not found"'
         return 1
     fi
 
@@ -834,6 +904,7 @@ update_traveladvisor_manifest() {
 
     echo ""
     print_success "Travel Advisor manifest updated: $TRAVELADVISOR_MANIFEST"
+    send_dt_event "09-Update-TravelAdvisor-manifest" ',"status":"Success"'
 }
 
 save_aifoundry_creds_mode() {
@@ -1348,6 +1419,7 @@ main() {
 
         # Print final summary
         print_summary
+        send_dt_event "99-Workshop-setup-complete" ',"status":"Success","scenario":"All resources existed"'
         exit 0
     fi
 
@@ -1403,6 +1475,7 @@ main() {
 
     echo ""
     print_header "Workshop Setup Complete!"
+    send_dt_event "99-Workshop-setup-complete" ',"status":"Success","scenario":"Resources provisioned and configured"'
     echo ""
 }
 
