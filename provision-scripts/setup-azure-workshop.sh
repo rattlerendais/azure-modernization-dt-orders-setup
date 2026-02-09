@@ -82,6 +82,47 @@ print_info() {
 }
 
 # =============================================================================
+# Prerequisites Check
+# =============================================================================
+
+check_prerequisites() {
+    CREDS_FILE="../gen/workshop-credentials.json"
+
+    # Check if credentials file exists
+    if [ ! -f "$CREDS_FILE" ]; then
+        print_header "Prerequisites Check Failed"
+        echo ""
+        print_error "Workshop credentials file not found: $CREDS_FILE"
+        echo ""
+        echo "Before running this script, you must first set up your Dynatrace credentials."
+        echo ""
+        echo "Please run the following command first:"
+        echo ""
+        echo -e "  ${GRN}./input-credentials.sh${NC}"
+        echo ""
+        echo "This will create the credentials file with your Dynatrace environment details."
+        echo ""
+        exit 1
+    fi
+
+    # Validate that the credentials file has required fields
+    DT_ENVIRONMENT_ID_CHECK=$(cat "$CREDS_FILE" | jq -r '.DT_ENVIRONMENT_ID // empty' 2>/dev/null)
+    if [ -z "$DT_ENVIRONMENT_ID_CHECK" ]; then
+        print_header "Prerequisites Check Failed"
+        echo ""
+        print_error "Credentials file exists but is missing DT_ENVIRONMENT_ID"
+        echo ""
+        echo "Please re-run the credentials setup:"
+        echo ""
+        echo -e "  ${GRN}./input-credentials.sh${NC}"
+        echo ""
+        exit 1
+    fi
+
+    print_success "Prerequisites check passed - credentials file found"
+}
+
+# =============================================================================
 # Input Gathering
 # =============================================================================
 
@@ -1350,6 +1391,15 @@ quick_check_resources_with_defaults() {
 # =============================================================================
 
 main() {
+    # Check for --help first (doesn't require credentials)
+    if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+        show_usage
+        exit 0
+    fi
+
+    # Check prerequisites before any operation
+    check_prerequisites
+
     # Parse command line arguments
     case "$1" in
         --check)
