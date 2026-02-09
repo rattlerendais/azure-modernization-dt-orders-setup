@@ -267,7 +267,12 @@ delete_virtual_machine() {
     # Clean up associated network resources
     echo "Cleaning up network resources..."
 
-    # Delete NIC
+    # Delete NIC (try both naming conventions for compatibility)
+    az network nic delete \
+        --name "${VM_NAME}-nic" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --subscription "$AZURE_SUBSCRIPTION" \
+        --output none 2>/dev/null
     az network nic delete \
         --name "${VM_NAME}VMNic" \
         --resource-group "$AZURE_RESOURCE_GROUP" \

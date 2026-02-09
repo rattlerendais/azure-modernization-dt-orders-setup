@@ -465,7 +465,7 @@ create_virtual_machine() {
     echo ""
 
     # Capture both stdout and stderr for better error reporting
-    # Explicitly name network resources to avoid conflicts with orphaned resources
+    # Explicitly name all network resources to avoid conflicts with orphaned resources
     VM_OUTPUT=$(az vm create \
         --name "$VM_NAME" \
         --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -480,6 +480,7 @@ create_virtual_machine() {
         --vnet-name "${VM_NAME}-vnet" \
         --subnet "${VM_NAME}-subnet" \
         --nsg "${VM_NAME}-nsg" \
+        --nic-name "${VM_NAME}-nic" \
         --public-ip-address "${VM_NAME}-ip" \
         --tags "Owner=dynatrace-azure-workshop" \
         --output json 2>&1)
