@@ -536,6 +536,7 @@ create_aks_cluster() {
     echo "  - Node Count: $DEFAULT_AKS_NODE_COUNT"
     echo "  - Node Size: $DEFAULT_AKS_NODE_SIZE"
     echo "  - OS: Azure Linux"
+    echo "  - Availability Zones: 1, 2, 3"
     echo ""
     echo "This may take several minutes..."
 
@@ -546,6 +547,7 @@ create_aks_cluster() {
         --node-count $DEFAULT_AKS_NODE_COUNT \
         --node-vm-size "$DEFAULT_AKS_NODE_SIZE" \
         --os-sku AzureLinux \
+        --zones 1 2 3 \
         --enable-addons monitoring \
         --generate-ssh-keys \
         --tags "Owner=dynatrace-azure-workshop" \
@@ -1333,9 +1335,12 @@ quick_check_resources_with_defaults() {
     if [ "$(check_resource_group_exists "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION")" == "true" ]; then
         print_success "EXISTS"
         RG_EXISTS=true
+        # Get location from existing resource group (avoids asking user later)
+        AZURE_LOCATION=$(az group show --name "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query location --output tsv 2>/dev/null)
     else
         print_warning "NOT FOUND"
         RG_EXISTS=false
+        AZURE_LOCATION=""
     fi
 
     # Check VM
@@ -1478,15 +1483,36 @@ main() {
     # =========================================================================
     print_header "Resources Need to be Provisioned"
     echo ""
-    echo "Some or all workshop resources need to be created."
-    echo "Please provide the required inputs:"
+    echo "The following resources need to be created:"
+    [ "$RG_EXISTS" == "false" ] && echo "  - Resource Group: $AZURE_RESOURCE_GROUP"
+    [ "$VM_EXISTS" == "false" ] && echo "  - Virtual Machine: $VM_NAME"
+    [ "$AKS_EXISTS" == "false" ] && echo "  - AKS Cluster: $AKS_CLUSTER_NAME"
+    [ "$AIFOUNDRY_EXISTS" == "false" ] && echo "  - AI Foundry: $AIFOUNDRY_NAME"
+    echo ""
+
+    # Only ask for location if resource group doesn't exist
+    if [ "$RG_EXISTS" == "false" ]; then
+        read -p "Azure Location for new resources (default: $DEFAULT_LOCATION): " AZURE_LOCATION_INPUT
+        AZURE_LOCATION=${AZURE_LOCATION_INPUT:-$DEFAULT_LOCATION}
+    else
+        echo "Using existing resource group location: $AZURE_LOCATION"
+    fi
+
+    echo ""
     echo "-------------------------------------------------------------------"
+    echo "Configuration Summary:"
+    echo "-------------------------------------------------------------------"
+    echo "  Subscription:      $AZURE_SUBSCRIPTION"
+    echo "  Resource Group:    $AZURE_RESOURCE_GROUP"
+    echo "  Location:          $AZURE_LOCATION"
+    echo "-------------------------------------------------------------------"
+    echo ""
 
-    # Gather inputs for provisioning
-    gather_inputs
-
-    # Re-check resources with user-provided inputs
-    check_all_resources_status
+    read -p "Proceed with provisioning? (y/n): " CONFIRM
+    if [ "$CONFIRM" != "y" ]; then
+        echo "Provisioning cancelled."
+        exit 0
+    fi
 
     # Register required resource providers
     register_resource_providers
