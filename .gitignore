@@ -20,3 +20,7 @@ install.sh
 
 # downloaded files
 workshop-config/monaco
+
+#Claude code files
+.claude/
+CLAUDE.md
