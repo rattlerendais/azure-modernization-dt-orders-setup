@@ -1064,59 +1064,77 @@ configure_dynatrace_settings() {
     fi
 
     # -------------------------------------------------------------------------
-    # Enable Third-Party Vulnerability Analytics
+    # Enable Vulnerability Analytics (Third-Party + Code-Level)
+    # The schema requires all properties to be set together
     # -------------------------------------------------------------------------
     echo ""
-    echo "Enabling Third-Party Vulnerability Analytics..."
+    echo "Enabling Vulnerability Analytics..."
 
-    TPV_RESPONSE=$(curl -s -X POST "$dt_api_url" \
+    # First, check if settings already exist by querying
+    EXISTING_SETTINGS=$(curl -s -X GET "${dt_api_url}?schemaIds=builtin:appsec.runtime-vulnerability-detection&scopes=environment" \
         -H "Authorization: Api-Token $dt_api_token" \
-        -H "Content-Type: application/json" \
-        -d '[{
-            "schemaId": "builtin:appsec.runtime-vulnerability-detection",
-            "scope": "environment",
-            "value": {
-                "enableRuntimeVulnerabilityDetection": true,
-                "globalMonitoringModeTPV": "MONITORING_ON"
-            }
-        }]')
+        -H "Content-Type: application/json")
 
-    if echo "$TPV_RESPONSE" | grep -q '"code":200\|"code":201\|objectId'; then
-        print_success "Third-Party Vulnerability Analytics enabled"
+    EXISTING_OBJECT_ID=$(echo "$EXISTING_SETTINGS" | jq -r '.items[0].objectId // empty' 2>/dev/null)
+
+    if [ -n "$EXISTING_OBJECT_ID" ] && [ "$EXISTING_OBJECT_ID" != "null" ]; then
+        # Settings exist, use PUT to update
+        echo "  Found existing settings (objectId: $EXISTING_OBJECT_ID), updating..."
+
+        VA_RESPONSE=$(curl -s -X PUT "${dt_api_url}/${EXISTING_OBJECT_ID}" \
+            -H "Authorization: Api-Token $dt_api_token" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+                "scope": "environment",
+                "value": {
+                    "enableRuntimeVulnerabilityDetection": true,
+                    "globalMonitoringModeTPV": "MONITORING_ON",
+                    "enableCodeLevelVulnerabilityDetection": true,
+                    "globalMonitoringModeJava": "MONITORING_ON",
+                    "globalMonitoringModeDotNet": "MONITORING_ON"
+                }
+            }')
     else
-        if echo "$TPV_RESPONSE" | grep -q "already exists\|constraint-violation"; then
-            print_info "Third-Party Vulnerability Analytics already enabled or constraint exists"
-        else
-            print_warning "Could not enable Third-Party Vulnerability Analytics"
-            echo "  Response: $(echo "$TPV_RESPONSE" | jq -r '.error.message // .message // .' 2>/dev/null | head -1)"
-        fi
+        # No existing settings, use POST to create
+        echo "  Creating new vulnerability analytics settings..."
+
+        VA_RESPONSE=$(curl -s -X POST "$dt_api_url" \
+            -H "Authorization: Api-Token $dt_api_token" \
+            -H "Content-Type: application/json" \
+            -d '[{
+                "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+                "scope": "environment",
+                "value": {
+                    "enableRuntimeVulnerabilityDetection": true,
+                    "globalMonitoringModeTPV": "MONITORING_ON",
+                    "enableCodeLevelVulnerabilityDetection": true,
+                    "globalMonitoringModeJava": "MONITORING_ON",
+                    "globalMonitoringModeDotNet": "MONITORING_ON"
+                }
+            }]')
     fi
 
-    # -------------------------------------------------------------------------
-    # Enable Code-Level Vulnerability Analytics
-    # -------------------------------------------------------------------------
-    echo ""
-    echo "Enabling Code-Level Vulnerability Analytics..."
-
-    CLV_RESPONSE=$(curl -s -X POST "$dt_api_url" \
-        -H "Authorization: Api-Token $dt_api_token" \
-        -H "Content-Type: application/json" \
-        -d '[{
-            "schemaId": "builtin:appsec.runtime-vulnerability-detection",
-            "scope": "environment",
-            "value": {
-                "enableCodeLevelVulnerabilityDetection": true
-            }
-        }]')
-
-    if echo "$CLV_RESPONSE" | grep -q '"code":200\|"code":201\|objectId'; then
-        print_success "Code-Level Vulnerability Analytics enabled"
+    # Check result
+    if echo "$VA_RESPONSE" | grep -q '"code":200\|"code":201\|"code":204\|objectId'; then
+        print_success "Vulnerability Analytics enabled (Third-Party + Code-Level)"
     else
-        if echo "$CLV_RESPONSE" | grep -q "already exists\|constraint-violation"; then
-            print_info "Code-Level Vulnerability Analytics already enabled or constraint exists"
+        if echo "$VA_RESPONSE" | grep -q "already exists\|constraint-violation"; then
+            print_info "Vulnerability Analytics settings already configured"
         else
-            print_warning "Could not enable Code-Level Vulnerability Analytics"
-            echo "  Response: $(echo "$CLV_RESPONSE" | jq -r '.error.message // .message // .' 2>/dev/null | head -1)"
+            # Try to extract a meaningful error message
+            ERROR_MSG=$(echo "$VA_RESPONSE" | jq -r '.error.message // .error.constraintViolations[0].message // .message // .' 2>/dev/null | head -1)
+            if [ -z "$ERROR_MSG" ] || [ "$ERROR_MSG" == "null" ]; then
+                ERROR_MSG="Empty response - check API token scopes (settings.read, settings.write)"
+            fi
+            print_warning "Could not enable Vulnerability Analytics"
+            echo "  Response: $ERROR_MSG"
+
+            # Show hint about required scopes
+            echo ""
+            print_info "Hint: Ensure your API token has these scopes:"
+            echo "  - settings.read"
+            echo "  - settings.write"
         fi
     fi
 
