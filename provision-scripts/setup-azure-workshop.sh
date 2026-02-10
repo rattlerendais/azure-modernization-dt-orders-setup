@@ -464,8 +464,18 @@ create_virtual_machine() {
     echo "  - Admin User: $VM_ADMIN_USERNAME"
     echo ""
 
+    # Clean up any orphaned network resources from previous failed deployments
+    echo "Checking for orphaned network resources..."
+    az network public-ip delete --name "${VM_NAME}-ip" -g "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --output none 2>/dev/null
+    az network nsg delete --name "${VM_NAME}-nsg" -g "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --output none 2>/dev/null
+    az network vnet delete --name "${VM_NAME}-vnet" -g "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --output none 2>/dev/null
+    az disk list -g "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query "[?starts_with(name, '${VM_NAME}')].name" -o tsv 2>/dev/null | while read disk; do
+        az disk delete --name "$disk" -g "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --yes --output none 2>/dev/null
+    done
+    echo ""
+
     # Capture both stdout and stderr for better error reporting
-    # Explicitly name all network resources to avoid conflicts with orphaned resources
+    # Explicitly name network resources to ensure consistent naming
     VM_OUTPUT=$(az vm create \
         --name "$VM_NAME" \
         --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -480,7 +490,6 @@ create_virtual_machine() {
         --vnet-name "${VM_NAME}-vnet" \
         --subnet "${VM_NAME}-subnet" \
         --nsg "${VM_NAME}-nsg" \
-        --nic-name "${VM_NAME}-nic" \
         --public-ip-address "${VM_NAME}-ip" \
         --tags "Owner=dynatrace-azure-workshop" \
         --output json 2>&1)
