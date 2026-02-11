@@ -1071,33 +1071,58 @@ configure_dynatrace_settings() {
     echo "Enabling Vulnerability Analytics..."
 
     # First, check if settings already exist by querying
+    echo "  Checking for existing vulnerability analytics settings..."
     EXISTING_SETTINGS=$(curl -s -X GET "${dt_api_url}?schemaIds=builtin:appsec.runtime-vulnerability-detection&scopes=environment" \
         -H "Authorization: Api-Token $dt_api_token" \
         -H "Content-Type: application/json")
 
     EXISTING_OBJECT_ID=$(echo "$EXISTING_SETTINGS" | jq -r '.items[0].objectId // empty' 2>/dev/null)
+    EXISTING_VALUE=$(echo "$EXISTING_SETTINGS" | jq -r '.items[0].value // empty' 2>/dev/null)
+
+    # Debug: Show what we found
+    echo "  Existing objectId: ${EXISTING_OBJECT_ID:-none}"
 
     if [ -n "$EXISTING_OBJECT_ID" ] && [ "$EXISTING_OBJECT_ID" != "null" ]; then
-        # Settings exist, use PUT to update
-        echo "  Found existing settings (objectId: $EXISTING_OBJECT_ID), updating..."
+        # Settings exist - we need to merge our changes with existing settings
+        echo "  Found existing settings, merging and updating..."
+
+        # Get the current value and merge our changes
+        # This preserves any existing 'technologies' array while enabling the features
+        MERGED_VALUE=$(echo "$EXISTING_VALUE" | jq '. + {
+            "enableRuntimeVulnerabilityDetection": true,
+            "globalMonitoringModeTPV": "MONITORING_ON",
+            "enableCodeLevelVulnerabilityDetection": true,
+            "globalMonitoringModeJava": "MONITORING_ON",
+            "globalMonitoringModeDotNet": "MONITORING_ON"
+        }' 2>/dev/null)
+
+        # If merge failed, use a default value
+        if [ -z "$MERGED_VALUE" ] || [ "$MERGED_VALUE" == "null" ]; then
+            MERGED_VALUE='{
+                "enableRuntimeVulnerabilityDetection": true,
+                "globalMonitoringModeTPV": "MONITORING_ON",
+                "enableCodeLevelVulnerabilityDetection": true,
+                "globalMonitoringModeJava": "MONITORING_ON",
+                "globalMonitoringModeDotNet": "MONITORING_ON"
+            }'
+        fi
+
+        # Create the full payload for PUT
+        PUT_PAYLOAD=$(jq -n \
+            --arg schemaId "builtin:appsec.runtime-vulnerability-detection" \
+            --arg scope "environment" \
+            --argjson value "$MERGED_VALUE" \
+            '{schemaId: $schemaId, scope: $scope, value: $value}')
 
         VA_RESPONSE=$(curl -s -X PUT "${dt_api_url}/${EXISTING_OBJECT_ID}" \
             -H "Authorization: Api-Token $dt_api_token" \
             -H "Content-Type: application/json" \
-            -d '{
-                "schemaId": "builtin:appsec.runtime-vulnerability-detection",
-                "scope": "environment",
-                "value": {
-                    "enableRuntimeVulnerabilityDetection": true,
-                    "globalMonitoringModeTPV": "MONITORING_ON",
-                    "enableCodeLevelVulnerabilityDetection": true,
-                    "globalMonitoringModeJava": "MONITORING_ON",
-                    "globalMonitoringModeDotNet": "MONITORING_ON"
-                }
-            }')
+            -d "$PUT_PAYLOAD")
+
+        echo "  PUT Response: $(echo "$VA_RESPONSE" | jq -c '.' 2>/dev/null || echo "$VA_RESPONSE")"
     else
         # No existing settings, use POST to create
-        echo "  Creating new vulnerability analytics settings..."
+        echo "  No existing settings found, creating new..."
 
         VA_RESPONSE=$(curl -s -X POST "$dt_api_url" \
             -H "Authorization: Api-Token $dt_api_token" \
@@ -1113,6 +1138,8 @@ configure_dynatrace_settings() {
                     "globalMonitoringModeDotNet": "MONITORING_ON"
                 }
             }]')
+
+        echo "  POST Response: $(echo "$VA_RESPONSE" | jq -c '.' 2>/dev/null || echo "$VA_RESPONSE")"
     fi
 
     # Check result
