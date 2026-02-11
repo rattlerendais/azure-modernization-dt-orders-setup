@@ -44,22 +44,33 @@ echo ""
 # App #1 - Hipster Shop
 # ==========================================================
 echo "Deploying App #1 - Hipster Shop..."
-./start-k8-hipstershop.sh > /dev/null 2>&1
-echo "  Done."
+kubectl create ns hipstershop 2>/dev/null || true
+if ! kubectl -n hipstershop apply -f ./manifests/hipstershop-manifest.yaml; then
+    echo "  ERROR: Failed to deploy Hipster Shop"
+else
+    echo "  Done."
+fi
 
 # ==========================================================
 # App #2 - DT Orders
 # ==========================================================
 echo "Deploying App #2 - DT Orders..."
-kubectl create ns staging > /dev/null 2>&1 || true
-kubectl create -f manifests/dynatrace-oneagent-metadata-viewer.yaml > /dev/null 2>&1 || true
-kubectl -n staging apply -f manifests/catalog-service.yml > /dev/null 2>&1
-kubectl -n staging apply -f manifests/customer-service.yml > /dev/null 2>&1
-kubectl -n staging apply -f manifests/order-service.yml > /dev/null 2>&1
-kubectl -n staging apply -f manifests/frontend.yml > /dev/null 2>&1
-kubectl -n staging apply -f manifests/browser-traffic.yml > /dev/null 2>&1
-kubectl -n staging apply -f manifests/load-traffic.yml > /dev/null 2>&1
-echo "  Done."
+kubectl create ns staging 2>/dev/null || true
+kubectl create -f manifests/dynatrace-oneagent-metadata-viewer.yaml 2>/dev/null || true
+
+DTORDERS_ERROR=false
+kubectl -n staging apply -f manifests/catalog-service.yml || DTORDERS_ERROR=true
+kubectl -n staging apply -f manifests/customer-service.yml || DTORDERS_ERROR=true
+kubectl -n staging apply -f manifests/order-service.yml || DTORDERS_ERROR=true
+kubectl -n staging apply -f manifests/frontend.yml || DTORDERS_ERROR=true
+kubectl -n staging apply -f manifests/browser-traffic.yml || DTORDERS_ERROR=true
+kubectl -n staging apply -f manifests/load-traffic.yml || DTORDERS_ERROR=true
+
+if [ "$DTORDERS_ERROR" = true ]; then
+    echo "  WARNING: Some errors occurred during DT Orders deployment"
+else
+    echo "  Done."
+fi
 
 # Send event for DT Orders
 POD_NAMES=$(kubectl -n staging get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
@@ -73,8 +84,11 @@ curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.
 # App #3 - Travel Advisor
 # ==========================================================
 echo "Deploying App #3 - Travel Advisor..."
-kubectl apply -f manifests/traveladvisor-combined.yaml > /dev/null 2>&1
-echo "  Done."
+if ! kubectl apply -f manifests/traveladvisor-combined.yaml; then
+    echo "  ERROR: Failed to deploy Travel Advisor"
+else
+    echo "  Done."
+fi
 
 # Send event for Travel Advisor
 TRAVELADVISOR_POD_NAMES=$(kubectl -n travel-advisor-azure-openai-sample get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
