@@ -827,8 +827,6 @@ save_aifoundry_credentials() {
         return 1
     fi
 
-    echo "Fetching AI Foundry endpoint and API key for: $aifoundry_name"
-
     # Get the AI Foundry endpoint
     AZURE_AIFOUNDRY_ENDPOINT=$(az cognitiveservices account show \
         --name "$aifoundry_name" \
@@ -858,8 +856,6 @@ save_aifoundry_credentials() {
     fi
 
     print_success "Retrieved AI Foundry credentials"
-    echo "  Endpoint: $AZURE_AIFOUNDRY_ENDPOINT"
-    echo "  API Key: [REDACTED]"
 
     # Check if credentials file exists
     if [ ! -f "$creds_file" ]; then
@@ -870,8 +866,6 @@ save_aifoundry_credentials() {
     fi
 
     # Update the credentials file using jq
-    echo ""
-    echo "Updating $creds_file with AI Foundry credentials..."
     TEMP_FILE=$(mktemp)
     jq --arg endpoint "$AZURE_AIFOUNDRY_ENDPOINT" \
        --arg key "$AZURE_AIFOUNDRY_MODEL_KEY" \
@@ -919,8 +913,6 @@ update_traveladvisor_manifest() {
         dt_api_token=$(cat "$creds_file" | jq -r '.DT_API_TOKEN // empty')
     fi
 
-    echo "Updating manifest with Azure OpenAI credentials..."
-
     # Update AZURE_OPENAI_ENDPOINT
     sed -i 's~AZURE_OPENAI_ENDPOINT:.*~AZURE_OPENAI_ENDPOINT: "'"$endpoint"'"~' "$TRAVELADVISOR_MANIFEST"
 
@@ -931,13 +923,9 @@ update_traveladvisor_manifest() {
     sed -i 's~AZURE_OPENAI_API_KEY:.*~AZURE_OPENAI_API_KEY: "'"$api_key"'"~' "$TRAVELADVISOR_MANIFEST"
 
     print_success "Updated Azure OpenAI credentials"
-    echo "  AZURE_OPENAI_ENDPOINT: $endpoint"
-    echo "  AZURE_OPENAI_KEY: [REDACTED]"
 
     # Update OTEL credentials if DT credentials are available
     if [ -n "$dt_environment_id" ] && [ -n "$dt_api_token" ]; then
-        echo ""
-        echo "Updating manifest with OTEL credentials..."
 
         local otel_endpoint="https://${dt_environment_id}.live.dynatrace.com/api/v2/otlp"
 
@@ -948,8 +936,6 @@ update_traveladvisor_manifest() {
         sed -i 's~OTEL_API_TOKEN:.*~OTEL_API_TOKEN: "'"$dt_api_token"'"~' "$TRAVELADVISOR_MANIFEST"
 
         print_success "Updated OTEL credentials"
-        echo "  OTEL_ENDPOINT: $otel_endpoint"
-        echo "  OTEL_API_TOKEN: [REDACTED]"
     else
         print_warning "DT credentials not found in $creds_file - OTEL settings not updated"
         echo "  To configure OTEL, ensure DT_ENVIRONMENT_ID and DT_API_TOKEN are in your credentials file"
@@ -1071,7 +1057,6 @@ configure_dynatrace_settings() {
     echo "Enabling Vulnerability Analytics..."
 
     # First, check if settings already exist by querying
-    echo "  Checking for existing vulnerability analytics settings..."
     EXISTING_SETTINGS=$(curl -s -X GET "${dt_api_url}?schemaIds=builtin:appsec.runtime-vulnerability-detection&scopes=environment" \
         -H "Authorization: Api-Token $dt_api_token" \
         -H "Content-Type: application/json")
@@ -1079,12 +1064,8 @@ configure_dynatrace_settings() {
     EXISTING_OBJECT_ID=$(echo "$EXISTING_SETTINGS" | jq -r '.items[0].objectId // empty' 2>/dev/null)
     EXISTING_VALUE=$(echo "$EXISTING_SETTINGS" | jq -r '.items[0].value // empty' 2>/dev/null)
 
-    # Debug: Show what we found
-    echo "  Existing objectId: ${EXISTING_OBJECT_ID:-none}"
-
     if [ -n "$EXISTING_OBJECT_ID" ] && [ "$EXISTING_OBJECT_ID" != "null" ]; then
         # Settings exist - we need to merge our changes with existing settings
-        echo "  Found existing settings, merging and updating..."
 
         # Get the current value and merge our changes
         # This preserves any existing 'technologies' array while enabling the features
@@ -1118,11 +1099,8 @@ configure_dynatrace_settings() {
             -H "Authorization: Api-Token $dt_api_token" \
             -H "Content-Type: application/json" \
             -d "$PUT_PAYLOAD")
-
-        echo "  PUT Response: $(echo "$VA_RESPONSE" | jq -c '.' 2>/dev/null || echo "$VA_RESPONSE")"
     else
         # No existing settings, use POST to create
-        echo "  No existing settings found, creating new..."
 
         VA_RESPONSE=$(curl -s -X POST "$dt_api_url" \
             -H "Authorization: Api-Token $dt_api_token" \
@@ -1138,8 +1116,6 @@ configure_dynatrace_settings() {
                     "globalMonitoringModeDotNet": "MONITORING_ON"
                 }
             }]')
-
-        echo "  POST Response: $(echo "$VA_RESPONSE" | jq -c '.' 2>/dev/null || echo "$VA_RESPONSE")"
     fi
 
     # Check result
