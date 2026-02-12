@@ -16,7 +16,7 @@ AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-"dynatrace-azure-workshop"}
 AZURE_AKS_CLUSTER_NAME=${AZURE_AKS_CLUSTER_NAME:-"dynatrace-azure-workshop-cluster"}
 
 EASYTRADE_NAMESPACE="easytrade"
-GITHUB_RAW_BASE="https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release"
+KUSTOMIZATION_DIR="./manifests/easytrade"
 
 echo "=========================================================="
 echo "Deploying EasyTrade Application"
@@ -51,56 +51,24 @@ echo "Creating namespace '$EASYTRADE_NAMESPACE'..."
 kubectl create ns "$EASYTRADE_NAMESPACE" 2>/dev/null || true
 
 # ==========================================================
-# Deploy EasyTrade manifests from GitHub
+# Deploy EasyTrade using Kustomization
 # ==========================================================
 echo ""
-echo "Deploying EasyTrade manifests from GitHub..."
+echo "Deploying EasyTrade using kustomization..."
+echo "  Kustomization directory: $KUSTOMIZATION_DIR"
 echo ""
 
-EASYTRADE_ERROR=false
+if [ ! -d "$KUSTOMIZATION_DIR" ]; then
+    echo "ERROR: Kustomization directory not found: $KUSTOMIZATION_DIR"
+    exit 1
+fi
 
-# Core infrastructure (deploy first)
-echo "  Deploying core infrastructure..."
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/connection-strings.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/db.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/rabbitmq.yaml" || EASYTRADE_ERROR=true
-
-# Feature flag service
-echo "  Deploying feature flag service..."
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/feature-flag-service.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/feature-flag-service-setup.yaml" || EASYTRADE_ERROR=true
-
-# Application services
-echo "  Deploying application services..."
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/accountservice.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/aggregator-service.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/broker-service.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/calculationservice.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/contentcreator.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/credit-card-order-service.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/engine.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/loginservice.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/manager.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/offerservice.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/pricing-service.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/third-party-service.yaml" || EASYTRADE_ERROR=true
-
-# Frontend
-echo "  Deploying frontend..."
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/frontend.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/frontendreverseproxy.yaml" || EASYTRADE_ERROR=true
-
-# Problem operator and load generator
-echo "  Deploying problem operator and load generator..."
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/problem-operator.yaml" || EASYTRADE_ERROR=true
-kubectl -n "$EASYTRADE_NAMESPACE" apply -f "$GITHUB_RAW_BASE/loadgen.yaml" || EASYTRADE_ERROR=true
-
-if [ "$EASYTRADE_ERROR" = true ]; then
-    echo ""
-    echo "  WARNING: Some errors occurred during EasyTrade deployment"
-else
+if kubectl apply -k "$KUSTOMIZATION_DIR"; then
     echo ""
     echo "  Done."
+else
+    echo ""
+    echo "  WARNING: Some errors occurred during EasyTrade deployment"
 fi
 
 # Send event for EasyTrade
