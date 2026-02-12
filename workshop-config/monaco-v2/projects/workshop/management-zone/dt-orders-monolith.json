@@ -2,29 +2,24 @@
   "name": "{{ .name }}",
   "rules": [
     {
-      "type": "SERVICE",
+      "type": "ME",
       "enabled": true,
-      "propagationTypes": [
-        "SERVICE_TO_HOST_LIKE",
-        "SERVICE_TO_PROCESS_GROUP_LIKE"
-      ],
-      "conditions": [
-        {
-          "key": {
-            "attribute": "SERVICE_TAGS"
-          },
-          "comparisonInfo": {
-            "type": "TAG",
+      "attributeRule": {
+        "entityType": "SERVICE",
+        "serviceToHostPropagation": true,
+        "serviceToPGPropagation": true,
+        "conditions": [
+          {
+            "key": "SERVICE_TAGS",
             "operator": "EQUALS",
-            "value": {
+            "tag": {
               "context": "CONTEXTLESS",
               "key": "stage",
-              "value":"production"
-            },
-            "negate": false
+              "value": "production"
+            }
           }
-        }
-      ]
+        ]
+      }
     }
   ]
 }

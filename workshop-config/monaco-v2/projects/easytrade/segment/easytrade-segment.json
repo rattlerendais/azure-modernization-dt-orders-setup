@@ -1,0 +1,23 @@
+{
+  "name": "{{ .name }}",
+  "description": "Segment for EasyTrade application",
+  "isPublic": true,
+  "includes": [
+    {
+      "dataObject": "dt.entity.cloud_application_namespace",
+      "filter": "{\"type\":\"Group\",\"logicalOperator\":\"AND\",\"explicit\":false,\"children\":[{\"type\":\"Statement\",\"key\":{\"type\":\"Key\",\"textValue\":\"entity.name\",\"value\":\"entity.name\"},\"operator\":{\"type\":\"ComparisonOperator\",\"textValue\":\"=\",\"value\":\"=\"},\"value\":{\"type\":\"String\",\"textValue\":\"easytrade\",\"value\":\"easytrade\"}}]}"
+    },
+    {
+      "dataObject": "dt.entity.cloud_application",
+      "filter": "{\"type\":\"Group\",\"logicalOperator\":\"AND\",\"explicit\":false,\"children\":[{\"type\":\"Statement\",\"key\":{\"type\":\"Key\",\"textValue\":\"namespaceName\",\"value\":\"namespaceName\"},\"operator\":{\"type\":\"ComparisonOperator\",\"textValue\":\"=\",\"value\":\"=\"},\"value\":{\"type\":\"String\",\"textValue\":\"easytrade\",\"value\":\"easytrade\"}}]}"
+    },
+    {
+      "dataObject": "dt.entity.process_group",
+      "filter": "{\"type\":\"Group\",\"logicalOperator\":\"AND\",\"explicit\":false,\"children\":[{\"type\":\"Statement\",\"key\":{\"type\":\"Key\",\"textValue\":\"cloudApplicationNamespaceName\",\"value\":\"cloudApplicationNamespaceName\"},\"operator\":{\"type\":\"ComparisonOperator\",\"textValue\":\"=\",\"value\":\"=\"},\"value\":{\"type\":\"String\",\"textValue\":\"easytrade\",\"value\":\"easytrade\"}}]}"
+    },
+    {
+      "dataObject": "dt.entity.service",
+      "filter": "{\"type\":\"Group\",\"logicalOperator\":\"AND\",\"explicit\":false,\"children\":[{\"type\":\"Statement\",\"key\":{\"type\":\"Key\",\"textValue\":\"tags\",\"value\":\"tags\"},\"operator\":{\"type\":\"ComparisonOperator\",\"textValue\":\"=\",\"value\":\"=\"},\"value\":{\"type\":\"String\",\"textValue\":\"app:easytrade\",\"value\":\"app:easytrade\"}}]}"
+    }
+  ]
+}

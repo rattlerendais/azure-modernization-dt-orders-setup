@@ -1,33 +1,23 @@
 {
   "name": "{{ .name }}",
-  "description": null,
   "rules": [
     {
-      "type": "SERVICE",
+      "type": "ME",
       "enabled": true,
-      "valueFormat": "{ProcessGroup:Environment:project}",
-      "propagationTypes": [
-        "SERVICE_TO_PROCESS_GROUP_LIKE"
-      ],
-      "conditions": [
-        {
-          "key": {
-            "attribute": "PROCESS_GROUP_CUSTOM_METADATA",
-            "dynamicKey": {
-              "source": "ENVIRONMENT",
-              "key": "project"
-            },
-            "type": "PROCESS_CUSTOM_METADATA_KEY"
-          },
-          "comparisonInfo": {
-            "type": "STRING",
-            "operator": "EXISTS",
-            "value": null,
-            "negate": false,
-            "caseSensitive": null
+      "valueNormalization": "Leave text as-is",
+      "attributeRule": {
+        "entityType": "PROCESS_GROUP",
+        "serviceToHostPropagation": false,
+        "serviceToPGPropagation": true,
+        "pgToHostPropagation": true,
+        "pgToServicePropagation": true,
+        "conditions": [
+          {
+            "key": "PROCESS_GROUP_NAME",
+            "operator": "EXISTS"
           }
-        }
-      ]
+        ]
+      }
     }
   ]
 }

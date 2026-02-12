@@ -68,11 +68,17 @@
       "type": "ME",
       "attributeRule": {
         "entityType": "SERVICE",
+        "serviceToHostPropagation": true,
+        "serviceToPGPropagation": true,
         "conditions": [
           {
             "key": "SERVICE_TAGS",
-            "operator": "TAG_KEY_EQUALS",
-            "tag": "app:easytrade"
+            "operator": "EQUALS",
+            "tag": {
+              "context": "CONTEXTLESS",
+              "key": "app",
+              "value": "easytrade"
+            }
           }
         ]
       }

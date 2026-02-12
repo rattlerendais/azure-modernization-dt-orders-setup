@@ -1,0 +1,7 @@
+configs:
+  - id: easytrade-segment
+    type:
+      segment:
+        name: easytrade-segment.json
+    config:
+      name: easytrade
