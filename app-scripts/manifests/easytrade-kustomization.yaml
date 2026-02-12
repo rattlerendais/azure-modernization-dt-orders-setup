@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# EasyTrade Application Manifests
+# Deploy with: kubectl apply -k .
+
+namespace: easytrade
+
+resources:
+  # Release manifests (individual files from GitHub)
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/connection-strings.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/db.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/rabbitmq.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/feature-flag-service.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/feature-flag-service-setup.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/accountservice.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/aggregator-service.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/broker-service.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/calculationservice.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/contentcreator.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/credit-card-order-service.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/engine.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/frontend.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/frontendreverseproxy.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/loginservice.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/manager.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/offerservice.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/pricing-service.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/problem-operator.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/third-party-service.yaml
+  - https://raw.githubusercontent.com/Dynatrace/easytrade/main/kubernetes-manifests/release/loadgen.yaml
+
+  # Problem patterns (remote directory with its own kustomization.yaml)
+  - https://github.com/Dynatrace/easytrade/kubernetes-manifests/problem-patterns?ref=main
