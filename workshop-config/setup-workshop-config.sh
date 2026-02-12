@@ -220,6 +220,14 @@ case "$SETUP_TYPE" in
             run_monaco db $DASHBOARD_OWNER_EMAIL
         fi
         ;;
+    "easytrade")
+        echo "Setup type = easytrade"
+        echo "Deploying EasyTrade Monaco configuration..."
+        echo "  - Management Zone: EasyTrade"
+        echo "  - Custom Service: NotMiningBitcoin (.NET)"
+        download_monaco
+        run_monaco_with_retry easytrade
+        ;;
     *)
         echo "Setup type = base workshop"
         download_monaco
