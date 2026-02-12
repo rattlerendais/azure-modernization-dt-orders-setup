@@ -5,43 +5,91 @@
 # =============================================================================
 # This script uses Monaco v2 (2.28.1+) for Dynatrace configuration deployment.
 #
-# Monaco v2 improvements over v1:
-# - Better dependency resolution between configs
-# - Manifest-based configuration (manifest.yaml instead of environments.yaml)
-# - Built-in retry logic for transient failures
-# - Support for Settings 2.0 APIs
+# Usage: ./setup-workshop-config.sh [setup-type] [options]
+#   setup-type: k8, services-vm, synthetics, dashboard, easytrade, or blank for base
+#   options: --verbose for detailed Monaco output
 # =============================================================================
 
 source ./_workshop-config.lib
 
-# optional argument.  If not passed, then the base workshop is setup.
-# setup types are for additional features like kubernetes
-SETUP_TYPE=$1
-DASHBOARD_OWNER_EMAIL=$2    # This is required for the dashboard monaco project
-                            # Otherwise it is not required
+# Parse arguments
+SETUP_TYPE=""
+DASHBOARD_OWNER_EMAIL=""
+VERBOSE=false
+
+for arg in "$@"; do
+    case $arg in
+        --verbose|-v)
+            VERBOSE=true
+            ;;
+        *)
+            if [ -z "$SETUP_TYPE" ]; then
+                SETUP_TYPE=$arg
+            elif [ -z "$DASHBOARD_OWNER_EMAIL" ]; then
+                DASHBOARD_OWNER_EMAIL=$arg
+            fi
+            ;;
+    esac
+done
 
 # Monaco v2 configuration
 MONACO_V2_MANIFEST=./monaco-v2/manifest.yaml
 MONACO_V2_VERSION="2.28.1"
+MONACO_LOG_FILE="/tmp/monaco-deploy-$$.log"
+
+# Event endpoint
+EVENT_ENDPOINT="https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event"
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+send_event() {
+    local step="$1"
+    local status="${2:-running}"
+    local project="${3:-}"
+
+    local JSON_EVENT=$(cat <<EOF
+{
+  "id": "1",
+  "step": "$step",
+  "status": "$status",
+  "project": "$project",
+  "event.provider": "azure-workshop-provisioning",
+  "event.category": "azure-workshop",
+  "user": "$EMAIL",
+  "event.type": "provisioning-step",
+  "DT_ENVIRONMENT_ID": "$DT_ENVIRONMENT_ID",
+  "setup_type": "$SETUP_TYPE"
+}
+EOF
+)
+    curl -s -X POST "$EVENT_ENDPOINT" \
+        -H "Content-Type: application/json" \
+        -d "$JSON_EVENT" > /dev/null 2>&1
+}
+
+print_status() {
+    local status="$1"
+    local message="$2"
+
+    if [ "$status" == "ok" ]; then
+        echo "  [OK] $message"
+    elif [ "$status" == "fail" ]; then
+        echo "  [FAILED] $message"
+    elif [ "$status" == "info" ]; then
+        echo "  [..] $message"
+    else
+        echo "       $message"
+    fi
+}
 
 # =============================================================================
 # Monaco v2 Functions
 # =============================================================================
 
 download_monaco() {
-    PROVISIONING_STEP="07-WorkshopConfig-Download-Monaco"
-    JSON_EVENT=$(cat <<EOF
-{
-  "id": "1",
-  "step": "$PROVISIONING_STEP",
-  "event.provider": "azure-workshop-provisioning",
-  "event.category": "azure-workshop",
-  "user": "$EMAIL",
-  "event.type": "provisioning-step",
-  "DT_ENVIRONMENT_ID": "$DT_ENVIRONMENT_ID"
-}
-EOF
-)
+    send_event "07-WorkshopConfig-Download-Monaco" "running"
 
     # Determine OS and architecture for Monaco v2 binary
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -63,41 +111,29 @@ EOF
             fi
             ;;
         *)
-            # Default to Linux amd64
             MONACO_BINARY="monaco-linux-amd64"
             ;;
     esac
 
-    echo "Getting Monaco v2 binary: $MONACO_BINARY (version $MONACO_V2_VERSION)"
+    print_status "info" "Downloading Monaco v$MONACO_V2_VERSION ($MONACO_BINARY)..."
     rm -f monaco
 
-    # Monaco v2 is from the dynatrace/dynatrace-configuration-as-code repo
-    wget -q -O monaco "https://github.com/Dynatrace/dynatrace-configuration-as-code/releases/download/v${MONACO_V2_VERSION}/${MONACO_BINARY}"
+    wget -q -O monaco "https://github.com/Dynatrace/dynatrace-configuration-as-code/releases/download/v${MONACO_V2_VERSION}/${MONACO_BINARY}" 2>/dev/null
     chmod +x monaco
 
-    echo "Installed Monaco Version: $(./monaco version 2>/dev/null || ./monaco --version | tail -1)"
-
-    DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
-     -H "Content-Type: application/json" \
-     -d "$JSON_EVENT")
+    if [ -f monaco ] && [ -x monaco ]; then
+        print_status "ok" "Monaco v$MONACO_V2_VERSION installed"
+        send_event "07-WorkshopConfig-Download-Monaco" "success"
+    else
+        print_status "fail" "Failed to download Monaco"
+        send_event "07-WorkshopConfig-Download-Monaco" "failed"
+        return 1
+    fi
 }
 
 run_monaco() {
-    MONACO_PROJECT=$1
-    DASHBOARD_OWNER=$2
-    PROVISIONING_STEP="08-WorkshopConfig-Run-Monaco"
-    JSON_EVENT=$(cat <<EOF
-{
-  "id": "1",
-  "step": "$PROVISIONING_STEP",
-  "event.provider": "azure-workshop-provisioning",
-  "event.category": "azure-workshop",
-  "user": "$EMAIL",
-  "event.type": "provisioning-step",
-  "DT_ENVIRONMENT_ID": "$DT_ENVIRONMENT_ID"
-}
-EOF
-)
+    local MONACO_PROJECT=$1
+    local DASHBOARD_OWNER=$2
 
     # Set OWNER env var for dashboard project
     if [ -z "$DASHBOARD_OWNER" ]; then
@@ -111,138 +147,145 @@ EOF
         MONACO_PROJECT=workshop
     fi
 
-    echo "Running Monaco v2 for project = $MONACO_PROJECT"
-    echo "Command: ./monaco deploy $MONACO_V2_MANIFEST --project $MONACO_PROJECT"
-
     # Monaco v2 uses manifest.yaml and environment variables for credentials
     export DT_BASEURL=$DT_BASEURL
     export DT_API_TOKEN=$DT_API_TOKEN
 
-    ./monaco deploy $MONACO_V2_MANIFEST --project $MONACO_PROJECT
+    send_event "08-WorkshopConfig-Run-Monaco" "running" "$MONACO_PROJECT"
 
-    DEPLOY_RESULT=$?
+    if [ "$VERBOSE" = true ]; then
+        ./monaco deploy $MONACO_V2_MANIFEST --project $MONACO_PROJECT
+        DEPLOY_RESULT=$?
+    else
+        ./monaco deploy $MONACO_V2_MANIFEST --project $MONACO_PROJECT > "$MONACO_LOG_FILE" 2>&1
+        DEPLOY_RESULT=$?
+    fi
 
-    DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
-     -H "Content-Type: application/json" \
-     -d "$JSON_EVENT")
+    if [ $DEPLOY_RESULT -eq 0 ]; then
+        send_event "08-WorkshopConfig-Run-Monaco" "success" "$MONACO_PROJECT"
+    else
+        send_event "08-WorkshopConfig-Run-Monaco" "failed" "$MONACO_PROJECT"
+        if [ "$VERBOSE" = false ]; then
+            echo "       Error details (use --verbose for full output):"
+            grep -E "level=ERROR" "$MONACO_LOG_FILE" | head -5 | sed 's/^/       /'
+        fi
+    fi
 
     return $DEPLOY_RESULT
 }
 
 run_monaco_with_retry() {
-    MONACO_PROJECT=$1
-    DASHBOARD_OWNER=$2
-    MAX_RETRIES=${3:-2}
-    RETRY_DELAY=${4:-10}
+    local MONACO_PROJECT=$1
+    local DASHBOARD_OWNER=$2
+    local MAX_RETRIES=${3:-2}
+    local RETRY_DELAY=${4:-10}
 
-    echo "Running Monaco v2 with retry logic (max $MAX_RETRIES attempts)"
+    print_status "info" "Deploying project: $MONACO_PROJECT"
 
     for ((i=1; i<=MAX_RETRIES; i++)); do
-        echo ""
-        echo "=== Attempt $i of $MAX_RETRIES ==="
-
         run_monaco "$MONACO_PROJECT" "$DASHBOARD_OWNER"
         RESULT=$?
 
         if [ $RESULT -eq 0 ]; then
-            echo "Monaco deployment succeeded on attempt $i"
+            print_status "ok" "Project '$MONACO_PROJECT' deployed successfully"
             return 0
         else
             if [ $i -lt $MAX_RETRIES ]; then
-                echo "Deployment had issues, waiting ${RETRY_DELAY}s before retry..."
-                echo "(This can happen due to Dynatrace API propagation delays)"
+                print_status "info" "Retrying in ${RETRY_DELAY}s... (attempt $((i+1))/$MAX_RETRIES)"
                 sleep $RETRY_DELAY
             fi
         fi
     done
 
-    echo "Warning: Deployment completed with potential issues after $MAX_RETRIES attempts"
+    print_status "fail" "Project '$MONACO_PROJECT' deployment failed after $MAX_RETRIES attempts"
     return 1
 }
 
 run_custom_dynatrace_config() {
-    PROVISIONING_STEP="09-WorkshopConfig-Run-Custom-Dynatrace-Config"
-    JSON_EVENT=$(cat <<EOF
-{
-  "id": "1",
-  "step": "$PROVISIONING_STEP",
-  "event.provider": "azure-workshop-provisioning",
-  "event.category": "azure-workshop",
-  "user": "$EMAIL",
-  "event.type": "provisioning-step",
-  "DT_ENVIRONMENT_ID": "$DT_ENVIRONMENT_ID"
-}
-EOF
-)
-    setFrequentIssueDetectionOff
-    setServiceAnomalyDetection ./custom/service-anomalydetection.json
-    DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
-     -H "Content-Type: application/json" \
-     -d "$JSON_EVENT")
+    send_event "09-WorkshopConfig-Custom-Config" "running"
+
+    print_status "info" "Applying custom Dynatrace settings..."
+
+    setFrequentIssueDetectionOff > /dev/null 2>&1
+    setServiceAnomalyDetection ./custom/service-anomalydetection.json > /dev/null 2>&1
+
+    print_status "ok" "Frequent issue detection disabled"
+    print_status "ok" "Service anomaly detection configured"
+
+    send_event "09-WorkshopConfig-Custom-Config" "success"
 }
 
 # =============================================================================
 # Main Script
 # =============================================================================
 
+# Send start event
+send_event "06-WorkshopConfig-Start" "running"
+
 echo ""
-echo "-----------------------------------------------------------------------------------"
-echo "Setting up Workshop config for type: $SETUP_TYPE"
-echo "Dynatrace  : $DT_BASEURL"
-echo "Starting   : $(date)"
-echo "Monaco     : v2 ($MONACO_V2_VERSION)"
-echo "-----------------------------------------------------------------------------------"
+echo "==========================================================================="
+echo " Dynatrace Workshop Configuration"
+echo "==========================================================================="
+echo " Environment : $DT_BASEURL"
+echo " Setup Type  : ${SETUP_TYPE:-base workshop}"
+echo " Started     : $(date '+%Y-%m-%d %H:%M:%S')"
+echo "==========================================================================="
 echo ""
+
+OVERALL_RESULT=0
 
 case "$SETUP_TYPE" in
     "k8")
-        echo "Setup type = k8"
-        download_monaco
-        run_monaco_with_retry k8
+        echo "Configuring Kubernetes monitoring..."
+        download_monaco && run_monaco_with_retry k8 || OVERALL_RESULT=1
         ;;
     "services-vm")
-        echo "Setup type = services-vm"
-        download_monaco
-        run_monaco_with_retry services-vm
+        echo "Configuring VM services..."
+        download_monaco && run_monaco_with_retry services-vm || OVERALL_RESULT=1
         ;;
     "synthetics")
-        echo "Setup type = synthetics"
-        # Synthetics don't have dependencies, single run is fine
-        run_monaco synthetics
+        echo "Configuring Synthetic monitors..."
+        download_monaco && run_monaco synthetics || OVERALL_RESULT=1
         ;;
     "dashboard")
-        if [ -z $DASHBOARD_OWNER_EMAIL ]; then
-            echo "ABORT dashboard owner email is required argument"
-            echo "syntax: ./setup-workshop-config.sh dashboard name@company.com"
+        if [ -z "$DASHBOARD_OWNER_EMAIL" ]; then
+            echo "ERROR: Dashboard owner email is required"
+            echo "Usage: ./setup-workshop-config.sh dashboard name@company.com"
             exit 1
-        else
-            echo "Setup type = dashboard"
-            run_monaco db $DASHBOARD_OWNER_EMAIL
         fi
+        echo "Configuring Dashboard for $DASHBOARD_OWNER_EMAIL..."
+        download_monaco && run_monaco db "$DASHBOARD_OWNER_EMAIL" || OVERALL_RESULT=1
         ;;
     "easytrade")
-        echo "Setup type = easytrade"
-        echo "Deploying EasyTrade Monaco configuration..."
-        echo "  - Management Zone: EasyTrade"
-        echo "  - Custom Service: NotMiningBitcoin (.NET)"
-        download_monaco
-        run_monaco_with_retry easytrade
+        echo "Configuring EasyTrade application..."
+        download_monaco && run_monaco_with_retry easytrade || OVERALL_RESULT=1
         ;;
     *)
-        echo "Setup type = base workshop (includes workshop + easytrade)"
-        download_monaco
+        echo "Configuring base workshop + EasyTrade..."
         echo ""
-        echo "--- Deploying workshop Monaco configuration ---"
-        run_monaco_with_retry workshop
-        echo ""
-        echo "--- Deploying easytrade Monaco configuration ---"
-        run_monaco_with_retry easytrade
-        run_custom_dynatrace_config
+        if download_monaco; then
+            run_monaco_with_retry workshop || OVERALL_RESULT=1
+            run_monaco_with_retry easytrade || OVERALL_RESULT=1
+            run_custom_dynatrace_config
+        else
+            OVERALL_RESULT=1
+        fi
         ;;
 esac
 
 echo ""
-echo "-----------------------------------------------------------------------------------"
-echo "Done Setting up Workshop config for type - $SETUP_TYPE"
-echo "End: $(date)"
-echo "-----------------------------------------------------------------------------------"
+echo "==========================================================================="
+if [ $OVERALL_RESULT -eq 0 ]; then
+    echo " Status      : SUCCESS"
+    send_event "10-WorkshopConfig-Complete" "success"
+else
+    echo " Status      : COMPLETED WITH ERRORS (check output above)"
+    send_event "10-WorkshopConfig-Complete" "failed"
+fi
+echo " Finished    : $(date '+%Y-%m-%d %H:%M:%S')"
+echo "==========================================================================="
+
+# Cleanup temp files
+rm -f "$MONACO_LOG_FILE" 2>/dev/null
+
+exit $OVERALL_RESULT

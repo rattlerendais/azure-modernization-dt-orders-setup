@@ -1147,6 +1147,72 @@ configure_dynatrace_settings() {
 }
 
 # =============================================================================
+# Deploy Monaco Workshop Configuration
+# =============================================================================
+
+deploy_monaco_configuration() {
+    local creds_file=$1
+
+    print_header "Deploying Monaco Workshop Configuration"
+
+    # Load credentials
+    if [ ! -f "$creds_file" ]; then
+        print_warning "Credentials file not found: $creds_file"
+        print_warning "Skipping Monaco deployment"
+        return 1
+    fi
+
+    local dt_environment_id=$(cat "$creds_file" | jq -r '.DT_ENVIRONMENT_ID // empty')
+    local dt_api_token=$(cat "$creds_file" | jq -r '.DT_API_TOKEN // empty')
+
+    if [ -z "$dt_environment_id" ] || [ -z "$dt_api_token" ]; then
+        print_warning "DT_ENVIRONMENT_ID or DT_API_TOKEN not found in credentials file"
+        print_warning "Skipping Monaco deployment"
+        return 1
+    fi
+
+    # Export credentials for Monaco
+    export DT_BASEURL="https://${dt_environment_id}.live.dynatrace.com"
+    export DT_API_TOKEN="$dt_api_token"
+    export EMAIL="$EMAIL"
+    export DT_ENVIRONMENT_ID="$dt_environment_id"
+
+    # Check if setup-workshop-config.sh exists
+    MONACO_SCRIPT="../workshop-config/setup-workshop-config.sh"
+    if [ ! -f "$MONACO_SCRIPT" ]; then
+        print_warning "Monaco setup script not found: $MONACO_SCRIPT"
+        print_warning "Skipping Monaco deployment"
+        return 1
+    fi
+
+    echo ""
+    echo "Deploying Dynatrace configuration via Monaco..."
+    echo "  - Auto-tagging rules"
+    echo "  - Management Zones"
+    echo "  - SLOs"
+    echo "  - Custom Services"
+    echo ""
+
+    send_dt_event "11-Deploy-Monaco-Config" ',"status":"running"'
+
+    # Run the Monaco setup script (suppressed output by default)
+    cd ../workshop-config
+    ./setup-workshop-config.sh
+    MONACO_RESULT=$?
+    cd ../provision-scripts
+
+    if [ $MONACO_RESULT -eq 0 ]; then
+        print_success "Monaco configuration deployed successfully"
+        send_dt_event "11-Deploy-Monaco-Config" ',"status":"success"'
+    else
+        print_warning "Monaco deployment completed with some issues"
+        send_dt_event "11-Deploy-Monaco-Config" ',"status":"completed with warnings"'
+    fi
+
+    return $MONACO_RESULT
+}
+
+# =============================================================================
 # Combined Workshop Configuration (VM + AI Foundry Credentials)
 # =============================================================================
 
@@ -1454,6 +1520,13 @@ run_workshop_configuration() {
     echo "=========================================="
     configure_dynatrace_settings "$DEFAULT_CREDS_FILE"
 
+    # Step 4: Deploy Monaco Workshop Configuration
+    echo ""
+    echo "=========================================="
+    echo "Step 4: Deploying Monaco Configuration"
+    echo "=========================================="
+    deploy_monaco_configuration "$DEFAULT_CREDS_FILE"
+
     echo ""
     print_header "Workshop Configuration Complete"
     echo ""
@@ -1465,6 +1538,7 @@ run_workshop_configuration() {
     echo "  - Travel Advisor manifest updated with credentials"
     echo "  - Dynatrace: New Kubernetes Experience enabled"
     echo "  - Dynatrace: Vulnerability Analytics enabled"
+    echo "  - Monaco: Auto-tags, Management Zones, and SLOs deployed"
     echo ""
 }
 
