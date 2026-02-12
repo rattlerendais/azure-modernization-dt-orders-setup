@@ -1,7 +1,0 @@
-configs:
-  - id: dt-orders-production-segment
-    type:
-      segment:
-        name: dt-orders-production-segment.json
-    config:
-      name: dt-orders-production

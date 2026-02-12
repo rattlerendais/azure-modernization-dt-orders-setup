@@ -229,9 +229,14 @@ case "$SETUP_TYPE" in
         run_monaco_with_retry easytrade
         ;;
     *)
-        echo "Setup type = base workshop"
+        echo "Setup type = base workshop (includes workshop + easytrade)"
         download_monaco
+        echo ""
+        echo "--- Deploying workshop Monaco configuration ---"
         run_monaco_with_retry workshop
+        echo ""
+        echo "--- Deploying easytrade Monaco configuration ---"
+        run_monaco_with_retry easytrade
         run_custom_dynatrace_config
         ;;
 esac
