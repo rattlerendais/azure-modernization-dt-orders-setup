@@ -74,11 +74,7 @@
           {
             "key": "SERVICE_TAGS",
             "operator": "EQUALS",
-            "tag": {
-              "context": "CONTEXTLESS",
-              "key": "app",
-              "value": "easytrade"
-            }
+            "tag": "app:easytrade"
           }
         ]
       }

@@ -7,8 +7,6 @@
       "valueNormalization": "Leave text as-is",
       "attributeRule": {
         "entityType": "PROCESS_GROUP",
-        "serviceToHostPropagation": false,
-        "serviceToPGPropagation": true,
         "pgToHostPropagation": true,
         "pgToServicePropagation": true,
         "conditions": [

@@ -12,11 +12,7 @@
           {
             "key": "SERVICE_TAGS",
             "operator": "EQUALS",
-            "tag": {
-              "context": "CONTEXTLESS",
-              "key": "stage",
-              "value": "production"
-            }
+            "tag": "stage:production"
           }
         ]
       }
