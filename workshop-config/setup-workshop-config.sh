@@ -35,7 +35,7 @@ for arg in "$@"; do
 done
 
 # Tool versions
-DTCTL_VERSION="0.18.0"
+DTCTL_VERSION="0.10.0"
 MONACO_V2_VERSION="2.28.1"
 
 # Configuration paths
@@ -107,28 +107,36 @@ download_dtctl() {
     case "$OS" in
         darwin)
             if [ "$ARCH" == "arm64" ]; then
-                DTCTL_BINARY="dtctl_darwin_arm64"
+                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_darwin_arm64.tar.gz"
             else
-                DTCTL_BINARY="dtctl_darwin_amd64"
+                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_darwin_amd64.tar.gz"
             fi
             ;;
         linux)
             if [ "$ARCH" == "aarch64" ] || [ "$ARCH" == "arm64" ]; then
-                DTCTL_BINARY="dtctl_linux_arm64"
+                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_linux_arm64.tar.gz"
             else
-                DTCTL_BINARY="dtctl_linux_amd64"
+                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_linux_amd64.tar.gz"
             fi
             ;;
         *)
-            DTCTL_BINARY="dtctl_linux_amd64"
+            DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_linux_amd64.tar.gz"
             ;;
     esac
 
-    print_status "info" "Downloading dtctl v$DTCTL_VERSION ($DTCTL_BINARY)..."
-    rm -f dtctl-bin
+    print_status "info" "Downloading dtctl v$DTCTL_VERSION ($DTCTL_ARCHIVE)..."
+    rm -f dtctl-bin dtctl.tar.gz
 
-    wget -q -O dtctl-bin "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_BINARY}" 2>/dev/null
-    chmod +x dtctl-bin
+    # Download tar.gz archive
+    wget -q -O dtctl.tar.gz "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_ARCHIVE}" 2>/dev/null
+
+    if [ -f dtctl.tar.gz ]; then
+        # Extract and rename binary
+        tar -xzf dtctl.tar.gz dtctl 2>/dev/null
+        mv dtctl dtctl-bin 2>/dev/null
+        chmod +x dtctl-bin
+        rm -f dtctl.tar.gz
+    fi
 
     if [ -f dtctl-bin ] && [ -x dtctl-bin ]; then
         print_status "ok" "dtctl v$DTCTL_VERSION installed"
