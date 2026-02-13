@@ -125,12 +125,12 @@ download_dtctl() {
     esac
 
     print_status "info" "Downloading dtctl v$DTCTL_VERSION ($DTCTL_BINARY)..."
-    rm -f dtctl
+    rm -f dtctl-bin
 
-    wget -q -O dtctl "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_BINARY}" 2>/dev/null
-    chmod +x dtctl
+    wget -q -O dtctl-bin "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_BINARY}" 2>/dev/null
+    chmod +x dtctl-bin
 
-    if [ -f dtctl ] && [ -x dtctl ]; then
+    if [ -f dtctl-bin ] && [ -x dtctl-bin ]; then
         print_status "ok" "dtctl v$DTCTL_VERSION installed"
         send_event "07-WorkshopConfig-Download-dtctl" "success"
         return 0
@@ -149,12 +149,12 @@ deploy_dtctl_settings() {
     print_status "info" "Deploying Settings: $config_name"
 
     if [ "$VERBOSE" = true ]; then
-        ./dtctl config apply -f "$settings_file" \
+        ./dtctl-bin config apply -f "$settings_file" \
             --url "$DT_BASEURL" \
             --api-token "$DT_API_TOKEN"
         DEPLOY_RESULT=$?
     else
-        ./dtctl config apply -f "$settings_file" \
+        ./dtctl-bin config apply -f "$settings_file" \
             --url "$DT_BASEURL" \
             --api-token "$DT_API_TOKEN" > "$DTCTL_LOG_FILE" 2>&1
         DEPLOY_RESULT=$?
@@ -182,12 +182,12 @@ deploy_dtctl_slos() {
     print_status "info" "Deploying SLOs"
 
     if [ "$VERBOSE" = true ]; then
-        ./dtctl slo apply -f "$slo_file" \
+        ./dtctl-bin slo apply -f "$slo_file" \
             --url "$DT_BASEURL" \
             --api-token "$DT_API_TOKEN"
         DEPLOY_RESULT=$?
     else
-        ./dtctl slo apply -f "$slo_file" \
+        ./dtctl-bin slo apply -f "$slo_file" \
             --url "$DT_BASEURL" \
             --api-token "$DT_API_TOKEN" > "$DTCTL_LOG_FILE" 2>&1
         DEPLOY_RESULT=$?
