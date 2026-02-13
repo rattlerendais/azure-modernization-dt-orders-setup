@@ -1,0 +1,43 @@
+# Crashloop Demo - A pod that continuously crashes for testing/demo purposes
+# This is useful for demonstrating Kubernetes troubleshooting and Dynatrace monitoring
+#
+# Deploy with: kubectl apply -f crashloop-demo.yaml
+# Remove with: kubectl delete -f crashloop-demo.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crashloop-demo
+  labels:
+    name: crashloop-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop-demo
+  namespace: crashloop-demo
+  labels:
+    app: crashloop-demo
+    purpose: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crashloop-demo
+  template:
+    metadata:
+      labels:
+        app: crashloop-demo
+        purpose: demo
+    spec:
+      containers:
+      - name: crasher
+        image: busybox:latest
+        command: ["sh", "-c", "echo '[CRASH] Application encountered fatal error!' && exit 1"]
+        resources:
+          requests:
+            cpu: "1m"
+            memory: "1Mi"
+          limits:
+            cpu: "10m"
+            memory: "10Mi"

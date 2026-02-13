@@ -24,6 +24,7 @@ echo ""
 echo "Applications to deploy:"
 echo "  1. EasyTrade"
 echo "  2. Travel Advisor"
+echo "  3. Crashloop Demo (for troubleshooting demos)"
 echo ""
 
 # Get AKS credentials
@@ -106,6 +107,23 @@ curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.
      -H "Content-Type: application/json" \
      -d "$JSON_EVENT" > /dev/null 2>&1
 
+echo ""
+
+# ==========================================================
+# App #3 - Crashloop Demo
+# ==========================================================
+echo "=========================================================="
+echo "Deploying App #3 - Crashloop Demo"
+echo "=========================================================="
+
+if ! kubectl apply -f manifests/crashloop-demo.yaml; then
+    echo "  ERROR: Failed to deploy Crashloop Demo"
+    CRASHLOOP_ERROR=true
+else
+    echo "  Done."
+    CRASHLOOP_ERROR=false
+fi
+
 # ==========================================================
 # Wait for pods to start and show status
 # ==========================================================
@@ -127,6 +145,10 @@ echo "--- Travel Advisor (namespace: travel-advisor-azure-openai-sample) ---"
 kubectl -n travel-advisor-azure-openai-sample get pods 2>/dev/null || echo "  Namespace not found or no pods yet"
 
 echo ""
+echo "--- Crashloop Demo (namespace: crashloop-demo) ---"
+kubectl -n crashloop-demo get pods 2>/dev/null || echo "  Namespace not found or no pods yet"
+
+echo ""
 echo "=========================================================="
 echo "Deployment Complete!"
 echo "=========================================================="
@@ -137,7 +159,12 @@ echo ""
 echo "Check pod status with:"
 echo "  kubectl -n easytrade get pods"
 echo "  kubectl -n travel-advisor-azure-openai-sample get pods"
+echo "  kubectl -n crashloop-demo get pods"
 echo ""
 echo "To access EasyTrade frontend:"
 echo "  kubectl -n easytrade get svc frontendreverseproxy"
+echo ""
+echo "To stop/start crashloop demo:"
+echo "  ./stop-crashloop-demo.sh"
+echo "  ./start-crashloop-demo.sh"
 echo ""
