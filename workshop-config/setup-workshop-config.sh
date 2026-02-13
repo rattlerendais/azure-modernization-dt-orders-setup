@@ -1,16 +1,19 @@
 #!/bin/bash
 
 # =============================================================================
-# Workshop Configuration Script - dtctl + Monaco
+# Workshop Configuration Script - Monaco + Direct API
 # =============================================================================
 # This script uses:
-#   - dtctl for Settings 2.0 and SLOs (auto-tags, management-zones, etc.)
-#   - Monaco v2 for Classic API configs (custom-services, synthetics, dashboards)
+#   - Monaco v2 for Classic API configs (custom-services, conditional-naming, dashboard, synthetics)
+#   - Direct Settings 2.0 API calls for settings configurations
 #
 # Usage: ./setup-workshop-config.sh [setup-type] [options]
 #   setup-type: synthetics, dashboard, or blank for full workshop config
 #   options: --verbose for detailed output
 # =============================================================================
+
+# Change to script directory to ensure relative paths work
+cd "$(dirname "$0")"
 
 source ./_workshop-config.lib
 
@@ -35,15 +38,12 @@ for arg in "$@"; do
 done
 
 # Tool versions
-DTCTL_VERSION="0.10.0"
 MONACO_V2_VERSION="2.28.1"
 
 # Configuration paths
-DTCTL_DIR=./dtctl
 MONACO_V2_MANIFEST=./monaco-v2/manifest.yaml
 
 # Log files
-DTCTL_LOG_FILE="/tmp/dtctl-deploy-$$.log"
 MONACO_LOG_FILE="/tmp/monaco-deploy-$$.log"
 
 # Event endpoint
@@ -94,158 +94,154 @@ print_status() {
 }
 
 # =============================================================================
-# dtctl Functions (Settings 2.0 + SLOs)
+# Settings 2.0 API Functions
 # =============================================================================
 
-download_dtctl() {
-    send_event "07-WorkshopConfig-Download-dtctl" "running"
+# Apply a Settings 2.0 configuration
+applySettings20() {
+    local config_name="$1"
+    local json_payload="$2"
 
-    # Determine OS and architecture
-    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-    ARCH=$(uname -m)
+    print_status "info" "Applying Settings 2.0: $config_name"
 
-    case "$OS" in
-        darwin)
-            if [ "$ARCH" == "arm64" ]; then
-                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_darwin_arm64.tar.gz"
-            else
-                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_darwin_amd64.tar.gz"
-            fi
-            ;;
-        linux)
-            if [ "$ARCH" == "aarch64" ] || [ "$ARCH" == "arm64" ]; then
-                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_linux_arm64.tar.gz"
-            else
-                DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_linux_amd64.tar.gz"
-            fi
-            ;;
-        *)
-            DTCTL_ARCHIVE="dtctl_${DTCTL_VERSION}_linux_amd64.tar.gz"
-            ;;
-    esac
+    local response=$(curl -s -X POST \
+        "$DT_BASEURL/api/v2/settings/objects?Api-Token=$DT_API_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -H 'cache-control: no-cache' \
+        -d "$json_payload")
 
-    print_status "info" "Downloading dtctl v$DTCTL_VERSION ($DTCTL_ARCHIVE)..."
-    rm -f dtctl-bin
-
-    # Create temp directory for extraction (avoids conflict with dtctl/ config directory)
-    DTCTL_TEMP_DIR=$(mktemp -d)
-
-    # Download tar.gz archive
-    if wget -q -O "$DTCTL_TEMP_DIR/dtctl.tar.gz" "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_ARCHIVE}"; then
-        # Extract binary from archive
-        tar -xzf "$DTCTL_TEMP_DIR/dtctl.tar.gz" -C "$DTCTL_TEMP_DIR" dtctl 2>/dev/null
-
-        # Move binary to current directory with -bin suffix
-        if [ -f "$DTCTL_TEMP_DIR/dtctl" ]; then
-            mv "$DTCTL_TEMP_DIR/dtctl" ./dtctl-bin
-            chmod +x ./dtctl-bin
+    local error=$(echo "$response" | jq -r '.error.message // empty')
+    if [ -n "$error" ]; then
+        # Check if it's a "already exists" error - that's OK
+        if echo "$response" | grep -q "already exists"; then
+            print_status "ok" "$config_name (already exists)"
+            return 0
         fi
-    fi
-
-    # Cleanup temp directory
-    rm -rf "$DTCTL_TEMP_DIR"
-
-    if [ -f dtctl-bin ] && [ -x dtctl-bin ]; then
-        print_status "ok" "dtctl v$DTCTL_VERSION installed"
-        send_event "07-WorkshopConfig-Download-dtctl" "success"
-        return 0
-    else
-        print_status "fail" "Failed to download dtctl"
-        send_event "07-WorkshopConfig-Download-dtctl" "failed"
+        print_status "fail" "$config_name: $error"
+        if [ "$VERBOSE" = true ]; then
+            echo "       Response: $response"
+        fi
         return 1
+    else
+        print_status "ok" "$config_name"
+        return 0
     fi
 }
 
-deploy_dtctl_settings() {
-    local settings_file="$1"
-    local config_name="$2"
+# Configure auto-tagging rules
+configureAutoTags() {
+    send_event "07-WorkshopConfig-AutoTags" "running"
+    echo ""
+    echo "--- Configuring Auto-Tags ---"
 
-    send_event "08-WorkshopConfig-dtctl-Settings" "running" "$config_name"
-    print_status "info" "Deploying Settings: $config_name"
-
-    if [ "$VERBOSE" = true ]; then
-        ./dtctl-bin config apply -f "$settings_file" \
-            --url "$DT_BASEURL" \
-            --api-token "$DT_API_TOKEN"
-        DEPLOY_RESULT=$?
-    else
-        ./dtctl-bin config apply -f "$settings_file" \
-            --url "$DT_BASEURL" \
-            --api-token "$DT_API_TOKEN" > "$DTCTL_LOG_FILE" 2>&1
-        DEPLOY_RESULT=$?
-    fi
-
-    if [ $DEPLOY_RESULT -eq 0 ]; then
-        print_status "ok" "Settings deployed: $config_name"
-        send_event "08-WorkshopConfig-dtctl-Settings" "success" "$config_name"
-    else
-        print_status "fail" "Settings failed: $config_name"
-        send_event "08-WorkshopConfig-dtctl-Settings" "failed" "$config_name"
-        if [ "$VERBOSE" = false ] && [ -f "$DTCTL_LOG_FILE" ]; then
-            echo "       Error details (use --verbose for full output):"
-            tail -5 "$DTCTL_LOG_FILE" | sed 's/^/       /'
-        fi
-    fi
-
-    return $DEPLOY_RESULT
-}
-
-deploy_dtctl_slos() {
-    local slo_file="$1"
-
-    send_event "08-WorkshopConfig-dtctl-SLOs" "running"
-    print_status "info" "Deploying SLOs"
-
-    if [ "$VERBOSE" = true ]; then
-        ./dtctl-bin slo apply -f "$slo_file" \
-            --url "$DT_BASEURL" \
-            --api-token "$DT_API_TOKEN"
-        DEPLOY_RESULT=$?
-    else
-        ./dtctl-bin slo apply -f "$slo_file" \
-            --url "$DT_BASEURL" \
-            --api-token "$DT_API_TOKEN" > "$DTCTL_LOG_FILE" 2>&1
-        DEPLOY_RESULT=$?
-    fi
-
-    if [ $DEPLOY_RESULT -eq 0 ]; then
-        print_status "ok" "SLOs deployed successfully"
-        send_event "08-WorkshopConfig-dtctl-SLOs" "success"
-    else
-        print_status "fail" "SLO deployment failed"
-        send_event "08-WorkshopConfig-dtctl-SLOs" "failed"
-        if [ "$VERBOSE" = false ] && [ -f "$DTCTL_LOG_FILE" ]; then
-            echo "       Error details (use --verbose for full output):"
-            tail -5 "$DTCTL_LOG_FILE" | sed 's/^/       /'
-        fi
-    fi
-
-    return $DEPLOY_RESULT
-}
-
-run_dtctl_full_deployment() {
     local RESULT=0
 
+    # Auto-tag: project
+    applySettings20 "auto-tag-project" '[{
+        "schemaId": "builtin:tags.auto-tagging",
+        "scope": "environment",
+        "value": {
+            "name": "project",
+            "rules": [{
+                "type": "ME",
+                "enabled": true,
+                "valueNormalization": "Leave text as-is",
+                "attributeRule": {
+                    "entityType": "PROCESS_GROUP",
+                    "pgToHostPropagation": true,
+                    "pgToServicePropagation": true,
+                    "conditions": [{
+                        "key": "PROCESS_GROUP_NAME",
+                        "operator": "EXISTS"
+                    }]
+                }
+            }]
+        }
+    }]' || RESULT=1
+
+    # Auto-tag: service
+    applySettings20 "auto-tag-service" '[{
+        "schemaId": "builtin:tags.auto-tagging",
+        "scope": "environment",
+        "value": {
+            "name": "service",
+            "rules": [{
+                "type": "ME",
+                "enabled": true,
+                "valueNormalization": "Leave text as-is",
+                "attributeRule": {
+                    "entityType": "SERVICE",
+                    "serviceToHostPropagation": false,
+                    "serviceToPGPropagation": true,
+                    "conditions": [{
+                        "key": "SERVICE_DETECTED_NAME",
+                        "operator": "EXISTS"
+                    }]
+                }
+            }]
+        }
+    }]' || RESULT=1
+
+    if [ $RESULT -eq 0 ]; then
+        send_event "07-WorkshopConfig-AutoTags" "success"
+    else
+        send_event "07-WorkshopConfig-AutoTags" "failed"
+    fi
+
+    return $RESULT
+}
+
+# Configure management zones
+configureManagementZones() {
+    send_event "07-WorkshopConfig-ManagementZones" "running"
     echo ""
-    echo "--- dtctl: Settings 2.0 Deployment ---"
+    echo "--- Configuring Management Zones ---"
 
-    # Deploy auto-tags
-    deploy_dtctl_settings "$DTCTL_DIR/settings/auto-tags.yaml" "auto-tags" || RESULT=1
+    local RESULT=0
 
-    # Deploy management zones
-    deploy_dtctl_settings "$DTCTL_DIR/settings/management-zones.yaml" "management-zones" || RESULT=1
+    # Management Zone: EasyTrade
+    applySettings20 "mz-easytrade" '[{
+        "schemaId": "builtin:management-zones",
+        "scope": "environment",
+        "value": {
+            "name": "EasyTrade",
+            "rules": [{
+                "type": "ME",
+                "enabled": true,
+                "entitySelector": "type(PROCESS_GROUP),tag(\"[Kubernetes]namespace:easytrade\")"
+            }]
+        }
+    }]' || RESULT=1
 
-    # Deploy Kubernetes experience
-    deploy_dtctl_settings "$DTCTL_DIR/settings/kubernetes-experience.yaml" "kubernetes-experience" || RESULT=1
+    if [ $RESULT -eq 0 ]; then
+        send_event "07-WorkshopConfig-ManagementZones" "success"
+    else
+        send_event "07-WorkshopConfig-ManagementZones" "failed"
+    fi
 
-    # Deploy Vulnerability Analytics
-    deploy_dtctl_settings "$DTCTL_DIR/settings/vulnerability-analytics.yaml" "vulnerability-analytics" || RESULT=1
+    return $RESULT
+}
 
+# Enable Kubernetes App Experience
+enableKubernetesAppExperience() {
+    send_event "07-WorkshopConfig-K8sExperience" "running"
     echo ""
-    echo "--- dtctl: SLO Deployment ---"
+    echo "--- Enabling Kubernetes App Experience ---"
 
-    # Deploy SLOs
-    deploy_dtctl_slos "$DTCTL_DIR/slos/slos.yaml" || RESULT=1
+    applySettings20 "k8s-app-experience" '[{
+        "schemaId": "builtin:app-transition.kubernetes",
+        "scope": "environment",
+        "value": {
+            "enableKubernetesApp": true
+        }
+    }]'
+
+    local RESULT=$?
+    if [ $RESULT -eq 0 ]; then
+        send_event "07-WorkshopConfig-K8sExperience" "success"
+    else
+        send_event "07-WorkshopConfig-K8sExperience" "failed"
+    fi
 
     return $RESULT
 }
@@ -255,7 +251,7 @@ run_dtctl_full_deployment() {
 # =============================================================================
 
 download_monaco() {
-    send_event "07-WorkshopConfig-Download-Monaco" "running"
+    send_event "06-WorkshopConfig-Download-Monaco" "running"
 
     # Determine OS and architecture for Monaco v2 binary
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -289,10 +285,10 @@ download_monaco() {
 
     if [ -f monaco ] && [ -x monaco ]; then
         print_status "ok" "Monaco v$MONACO_V2_VERSION installed"
-        send_event "07-WorkshopConfig-Download-Monaco" "success"
+        send_event "06-WorkshopConfig-Download-Monaco" "success"
     else
         print_status "fail" "Failed to download Monaco"
-        send_event "07-WorkshopConfig-Download-Monaco" "failed"
+        send_event "06-WorkshopConfig-Download-Monaco" "failed"
         return 1
     fi
 }
@@ -312,7 +308,7 @@ run_monaco() {
     export DT_BASEURL=$DT_BASEURL
     export DT_API_TOKEN=$DT_API_TOKEN
 
-    send_event "09-WorkshopConfig-Run-Monaco" "running" "$MONACO_PROJECT"
+    send_event "08-WorkshopConfig-Run-Monaco" "running" "$MONACO_PROJECT"
 
     if [ "$VERBOSE" = true ]; then
         ./monaco deploy $MONACO_V2_MANIFEST --project $MONACO_PROJECT
@@ -323,9 +319,9 @@ run_monaco() {
     fi
 
     if [ $DEPLOY_RESULT -eq 0 ]; then
-        send_event "09-WorkshopConfig-Run-Monaco" "success" "$MONACO_PROJECT"
+        send_event "08-WorkshopConfig-Run-Monaco" "success" "$MONACO_PROJECT"
     else
-        send_event "09-WorkshopConfig-Run-Monaco" "failed" "$MONACO_PROJECT"
+        send_event "08-WorkshopConfig-Run-Monaco" "failed" "$MONACO_PROJECT"
         if [ "$VERBOSE" = false ]; then
             echo "       Error details (use --verbose for full output):"
             grep -E "level=ERROR" "$MONACO_LOG_FILE" | head -5 | sed 's/^/       /'
@@ -382,7 +378,7 @@ run_monaco_classic_configs() {
 # =============================================================================
 
 run_custom_dynatrace_config() {
-    send_event "10-WorkshopConfig-Custom-Config" "running"
+    send_event "09-WorkshopConfig-Custom-Config" "running"
 
     echo ""
     echo "--- Custom Dynatrace Settings (Direct API) ---"
@@ -394,7 +390,7 @@ run_custom_dynatrace_config() {
     print_status "ok" "Frequent issue detection disabled"
     print_status "ok" "Service anomaly detection configured"
 
-    send_event "10-WorkshopConfig-Custom-Config" "success"
+    send_event "09-WorkshopConfig-Custom-Config" "success"
 }
 
 # =============================================================================
@@ -402,7 +398,7 @@ run_custom_dynatrace_config() {
 # =============================================================================
 
 # Send start event
-send_event "06-WorkshopConfig-Start" "running"
+send_event "05-WorkshopConfig-Start" "running"
 
 echo ""
 echo "==========================================================================="
@@ -410,7 +406,7 @@ echo " Dynatrace Workshop Configuration"
 echo "==========================================================================="
 echo " Environment : $DT_BASEURL"
 echo " Setup Type  : ${SETUP_TYPE:-full workshop}"
-echo " Tools       : dtctl v$DTCTL_VERSION + Monaco v$MONACO_V2_VERSION"
+echo " Tools       : Monaco v$MONACO_V2_VERSION + Settings 2.0 API"
 echo " Started     : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "==========================================================================="
 echo ""
@@ -441,19 +437,20 @@ case "$SETUP_TYPE" in
         ;;
     *)
         # Full workshop configuration
-        echo "Configuring full workshop (dtctl + Monaco)..."
+        echo "Configuring full workshop..."
         echo ""
 
-        # Step 1: Download tools
+        # Step 1: Download Monaco
         echo "=== Step 1: Downloading Tools ==="
-        download_dtctl || OVERALL_RESULT=1
         download_monaco || OVERALL_RESULT=1
 
         if [ $OVERALL_RESULT -eq 0 ]; then
-            # Step 2: Deploy dtctl Settings 2.0 + SLOs
+            # Step 2: Configure Settings 2.0 via API
             echo ""
-            echo "=== Step 2: dtctl Deployment (Settings + SLOs) ==="
-            run_dtctl_full_deployment || OVERALL_RESULT=1
+            echo "=== Step 2: Settings 2.0 Configuration (API) ==="
+            configureAutoTags || OVERALL_RESULT=1
+            configureManagementZones || OVERALL_RESULT=1
+            enableKubernetesAppExperience || OVERALL_RESULT=1
 
             # Step 3: Deploy Monaco Classic API configs
             echo ""
@@ -472,15 +469,15 @@ echo ""
 echo "==========================================================================="
 if [ $OVERALL_RESULT -eq 0 ]; then
     echo " Status      : SUCCESS"
-    send_event "11-WorkshopConfig-Complete" "success"
+    send_event "10-WorkshopConfig-Complete" "success"
 else
     echo " Status      : COMPLETED WITH ERRORS (check output above)"
-    send_event "11-WorkshopConfig-Complete" "failed"
+    send_event "10-WorkshopConfig-Complete" "failed"
 fi
 echo " Finished    : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "==========================================================================="
 
 # Cleanup temp files
-rm -f "$DTCTL_LOG_FILE" "$MONACO_LOG_FILE" 2>/dev/null
+rm -f "$MONACO_LOG_FILE" 2>/dev/null
 
 exit $OVERALL_RESULT
