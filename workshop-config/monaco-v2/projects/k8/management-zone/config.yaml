@@ -1,9 +1,0 @@
-configs:
-  - id: dt-orders-k8
-    type:
-      settings:
-        schema: builtin:management-zones
-        scope: environment
-    config:
-      name: dt-orders-k8
-      template: dt-orders-k8.json

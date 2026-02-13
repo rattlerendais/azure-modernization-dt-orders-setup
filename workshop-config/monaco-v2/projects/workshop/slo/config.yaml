@@ -1,8 +1,0 @@
-configs:
-  - id: monolith-slo
-    type: slo
-    config:
-      name: DT-Orders Monolith Error Rate
-      template: monolith-slo.json
-      parameters:
-        mzname: dt-orders-monolith

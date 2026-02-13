@@ -15,15 +15,15 @@ fi
 AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-"dynatrace-azure-workshop"}
 AZURE_AKS_CLUSTER_NAME=${AZURE_AKS_CLUSTER_NAME:-"dynatrace-azure-workshop-cluster"}
 
+TRAVELADVISOR_NAMESPACE="travel-advisor-azure-openai-sample"
+MANIFEST_FILE="./manifests/traveladvisor-combined.yaml"
+
 echo "=========================================================="
-echo "Deploying Workshop K8s Applications"
+echo "Deploying Travel Advisor Application"
 echo "=========================================================="
 echo "  Resource Group: $AZURE_RESOURCE_GROUP"
 echo "  AKS Cluster:    $AZURE_AKS_CLUSTER_NAME"
-echo ""
-echo "Applications to deploy:"
-echo "  1. EasyTrade"
-echo "  2. Travel Advisor"
+echo "  Namespace:      $TRAVELADVISOR_NAMESPACE"
 echo ""
 
 # Get AKS credentials
@@ -47,59 +47,23 @@ echo "  Connected successfully."
 echo ""
 
 # ==========================================================
-# App #1 - EasyTrade
+# Deploy Travel Advisor
 # ==========================================================
-echo "=========================================================="
-echo "Deploying App #1 - EasyTrade"
-echo "=========================================================="
+echo "Deploying Travel Advisor..."
 
-EASYTRADE_NAMESPACE="easytrade"
-KUSTOMIZATION_DIR="./manifests/easytrade"
-
-echo "Creating namespace '$EASYTRADE_NAMESPACE'..."
-kubectl create ns "$EASYTRADE_NAMESPACE" 2>/dev/null || true
-
-echo "Deploying EasyTrade using kustomization..."
-if [ ! -d "$KUSTOMIZATION_DIR" ]; then
-    echo "  ERROR: Kustomization directory not found: $KUSTOMIZATION_DIR"
-    EASYTRADE_ERROR=true
-else
-    if kubectl apply -k "$KUSTOMIZATION_DIR"; then
-        echo "  Done."
-        EASYTRADE_ERROR=false
-    else
-        echo "  WARNING: Some errors occurred during EasyTrade deployment"
-        EASYTRADE_ERROR=true
-    fi
+if [ ! -f "$MANIFEST_FILE" ]; then
+    echo "  ERROR: Manifest file not found: $MANIFEST_FILE"
+    exit 1
 fi
 
-# Send event for EasyTrade
-EASYTRADE_POD_NAMES=$(kubectl -n "$EASYTRADE_NAMESPACE" get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
-PROVISIONING_STEP="11-Provisioning app on k8-EasyTrade"
-JSON_EVENT='{"id":"1","step":"'"$PROVISIONING_STEP"'","event.provider":"azure-workshop-provisioning","event.category":"azure-workshop","user":"'"$EMAIL"'","event.type":"provisioning-step","k8pods-easytrade":"'"$EASYTRADE_POD_NAMES"'","DT_ENVIRONMENT_ID":"'"$DT_ENVIRONMENT_ID"'"}'
-curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
-     -H "Content-Type: application/json" \
-     -d "$JSON_EVENT" > /dev/null 2>&1
-
-echo ""
-
-# ==========================================================
-# App #2 - Travel Advisor
-# ==========================================================
-echo "=========================================================="
-echo "Deploying App #2 - Travel Advisor"
-echo "=========================================================="
-
-if ! kubectl apply -f manifests/traveladvisor-combined.yaml; then
-    echo "  ERROR: Failed to deploy Travel Advisor"
-    TRAVELADVISOR_ERROR=true
-else
+if kubectl apply -f "$MANIFEST_FILE"; then
     echo "  Done."
-    TRAVELADVISOR_ERROR=false
+else
+    echo "  WARNING: Some errors occurred during Travel Advisor deployment"
 fi
 
 # Send event for Travel Advisor
-TRAVELADVISOR_POD_NAMES=$(kubectl -n travel-advisor-azure-openai-sample get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
+TRAVELADVISOR_POD_NAMES=$(kubectl -n "$TRAVELADVISOR_NAMESPACE" get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null)
 PROVISIONING_STEP="12-Provisioning app on k8-TravelAdvisor"
 JSON_EVENT='{"id":"1","step":"'"$PROVISIONING_STEP"'","event.provider":"azure-workshop-provisioning","event.category":"azure-workshop","user":"'"$EMAIL"'","event.type":"provisioning-step","k8pods-traveladvisor":"'"$TRAVELADVISOR_POD_NAMES"'","DT_ENVIRONMENT_ID":"'"$DT_ENVIRONMENT_ID"'"}'
 curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
@@ -117,27 +81,17 @@ echo ""
 echo "=========================================================="
 echo "Pod Status Summary"
 echo "=========================================================="
-
 echo ""
-echo "--- EasyTrade (namespace: easytrade) ---"
-kubectl -n easytrade get pods 2>/dev/null || echo "  Namespace not found or no pods yet"
-
-echo ""
-echo "--- Travel Advisor (namespace: travel-advisor-azure-openai-sample) ---"
-kubectl -n travel-advisor-azure-openai-sample get pods 2>/dev/null || echo "  Namespace not found or no pods yet"
+kubectl -n "$TRAVELADVISOR_NAMESPACE" get pods 2>/dev/null || echo "  Namespace not found or no pods yet"
 
 echo ""
 echo "=========================================================="
-echo "Deployment Complete!"
+echo "Travel Advisor Deployment Complete!"
 echo "=========================================================="
-echo ""
-echo "NOTE: EasyTrade has many services and may take several minutes"
-echo "      for all pods to reach 'Running' status."
 echo ""
 echo "Check pod status with:"
-echo "  kubectl -n easytrade get pods"
-echo "  kubectl -n travel-advisor-azure-openai-sample get pods"
+echo "  kubectl -n $TRAVELADVISOR_NAMESPACE get pods"
 echo ""
-echo "To access EasyTrade frontend:"
-echo "  kubectl -n easytrade get svc frontendreverseproxy"
+echo "To access the Travel Advisor app, get the service URL:"
+echo "  kubectl -n $TRAVELADVISOR_NAMESPACE get svc"
 echo ""

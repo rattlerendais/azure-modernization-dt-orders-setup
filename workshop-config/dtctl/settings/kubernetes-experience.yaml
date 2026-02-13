@@ -1,0 +1,12 @@
+# =============================================================================
+# Kubernetes Experience - dtctl Settings Configuration
+# Schema: builtin:app-transition.kubernetes
+# =============================================================================
+
+configs:
+  - name: kubernetes-experience
+    schema: builtin:app-transition.kubernetes
+    scope: environment
+    value:
+      kubernetesAppOptions:
+        enableKubernetesApp: true

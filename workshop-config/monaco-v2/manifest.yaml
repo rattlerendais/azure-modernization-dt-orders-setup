@@ -3,18 +3,24 @@ manifestVersion: 1.0
 # =============================================================================
 # Monaco v2 Configuration for DT-Orders Workshop
 # =============================================================================
+# NOTE: This manifest only contains Classic API configurations.
+# Settings 2.0 and SLOs have been migrated to dtctl (see ../dtctl/).
+# =============================================================================
 
 projects:
-  - name: workshop
-    path: projects/workshop
+  # Classic API: Conditional Naming for Process Groups
   - name: k8
     path: projects/k8
-  - name: services-vm
-    path: projects/services-vm
+
+  # Classic API: Dashboard
   - name: db
     path: projects/db
+
+  # Classic API: Synthetic Monitors
   - name: synthetics
     path: projects/synthetics
+
+  # Classic API: Custom Service (.NET)
   - name: easytrade
     path: projects/easytrade
 

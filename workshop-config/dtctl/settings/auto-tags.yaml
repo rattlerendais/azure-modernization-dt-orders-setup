@@ -1,0 +1,63 @@
+# =============================================================================
+# Auto-Tagging Rules - dtctl Settings Configuration
+# Schema: builtin:tags.auto-tagging
+# =============================================================================
+
+configs:
+  # Auto-tag: project - Tags process groups with their name
+  - name: project
+    schema: builtin:tags.auto-tagging
+    scope: environment
+    value:
+      name: project
+      rules:
+        - type: ME
+          enabled: true
+          valueNormalization: "Leave text as-is"
+          attributeRule:
+            entityType: PROCESS_GROUP
+            pgToHostPropagation: true
+            pgToServicePropagation: true
+            conditions:
+              - key: PROCESS_GROUP_NAME
+                operator: EXISTS
+
+  # Auto-tag: service - Tags services with their detected name
+  - name: service
+    schema: builtin:tags.auto-tagging
+    scope: environment
+    value:
+      name: service
+      rules:
+        - type: ME
+          enabled: true
+          valueNormalization: "Leave text as-is"
+          attributeRule:
+            entityType: SERVICE
+            serviceToHostPropagation: false
+            serviceToPGPropagation: true
+            conditions:
+              - key: SERVICE_DETECTED_NAME
+                operator: EXISTS
+
+  # Auto-tag: stage - Tags staging namespace workloads
+  - name: stage
+    schema: builtin:tags.auto-tagging
+    scope: environment
+    value:
+      name: stage
+      rules:
+        - type: ME
+          enabled: true
+          valueNormalization: "Leave text as-is"
+          valueFormat: staging
+          attributeRule:
+            entityType: PROCESS_GROUP
+            pgToHostPropagation: true
+            pgToServicePropagation: true
+            conditions:
+              - key: PROCESS_GROUP_PREDEFINED_METADATA
+                dynamicKey: KUBERNETES_NAMESPACE
+                operator: EQUALS
+                stringValue: staging
+                caseSensitive: false

@@ -38,7 +38,7 @@ metadata:
   labels:
     app: traveladvisor-app
 spec:
-  replicas: 2 # You likely want more than one instance for a production app
+  replicas: 1 # You likely want more than one instance for a production app
   selector:
     matchLabels:
       app: traveladvisor-app

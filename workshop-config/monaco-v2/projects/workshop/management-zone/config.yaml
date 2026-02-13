@@ -1,9 +1,0 @@
-configs:
-  - id: dt-orders-monolith
-    type:
-      settings:
-        schema: builtin:management-zones
-        scope: environment
-    config:
-      name: dt-orders-monolith
-      template: dt-orders-monolith.json

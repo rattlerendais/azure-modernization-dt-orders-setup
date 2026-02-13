@@ -1,9 +1,0 @@
-configs:
-  - id: k8-slo
-    type:
-      api: slo
-    config:
-      name: DT-Orders K8 Error Rate
-      template: k8-slo.json
-      parameters:
-        mzname: dt-orders-k8

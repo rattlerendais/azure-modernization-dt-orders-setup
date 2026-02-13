@@ -992,7 +992,10 @@ save_aifoundry_creds_mode() {
 }
 
 # =============================================================================
-# Configure Dynatrace Settings via API
+# Configure Dynatrace Settings via API (LEGACY)
+# NOTE: This function is no longer used in the main workflow.
+# K8s Experience and Vulnerability Analytics are now configured via dtctl
+# in setup-workshop-config.sh. Kept here for standalone/debugging use.
 # =============================================================================
 
 configure_dynatrace_settings() {
@@ -1147,18 +1150,18 @@ configure_dynatrace_settings() {
 }
 
 # =============================================================================
-# Deploy Monaco Workshop Configuration
+# Deploy Dynatrace Workshop Configuration (dtctl + Monaco)
 # =============================================================================
 
 deploy_monaco_configuration() {
     local creds_file=$1
 
-    print_header "Deploying Monaco Workshop Configuration"
+    print_header "Deploying Dynatrace Workshop Configuration"
 
     # Load credentials
     if [ ! -f "$creds_file" ]; then
         print_warning "Credentials file not found: $creds_file"
-        print_warning "Skipping Monaco deployment"
+        print_warning "Skipping Dynatrace configuration deployment"
         return 1
     fi
 
@@ -1167,49 +1170,54 @@ deploy_monaco_configuration() {
 
     if [ -z "$dt_environment_id" ] || [ -z "$dt_api_token" ]; then
         print_warning "DT_ENVIRONMENT_ID or DT_API_TOKEN not found in credentials file"
-        print_warning "Skipping Monaco deployment"
+        print_warning "Skipping Dynatrace configuration deployment"
         return 1
     fi
 
-    # Export credentials for Monaco
+    # Export credentials for dtctl and Monaco
     export DT_BASEURL="https://${dt_environment_id}.live.dynatrace.com"
     export DT_API_TOKEN="$dt_api_token"
     export EMAIL="$EMAIL"
     export DT_ENVIRONMENT_ID="$dt_environment_id"
 
     # Check if setup-workshop-config.sh exists
-    MONACO_SCRIPT="../workshop-config/setup-workshop-config.sh"
-    if [ ! -f "$MONACO_SCRIPT" ]; then
-        print_warning "Monaco setup script not found: $MONACO_SCRIPT"
-        print_warning "Skipping Monaco deployment"
+    CONFIG_SCRIPT="../workshop-config/setup-workshop-config.sh"
+    if [ ! -f "$CONFIG_SCRIPT" ]; then
+        print_warning "Workshop config script not found: $CONFIG_SCRIPT"
+        print_warning "Skipping Dynatrace configuration deployment"
         return 1
     fi
 
     echo ""
-    echo "Deploying Dynatrace configuration via Monaco..."
-    echo "  - Auto-tagging rules"
-    echo "  - Management Zones"
-    echo "  - SLOs"
-    echo "  - Custom Services"
+    echo "Deploying Dynatrace configuration (dtctl + Monaco)..."
+    echo "  dtctl (Settings 2.0):"
+    echo "    - Auto-tagging rules"
+    echo "    - Management Zones"
+    echo "    - SLOs"
+    echo "    - Kubernetes Experience"
+    echo "    - Vulnerability Analytics"
+    echo "  Monaco (Classic API):"
+    echo "    - Custom Services"
+    echo "    - Conditional Naming"
     echo ""
 
-    send_dt_event "11-Deploy-Monaco-Config" ',"status":"running"'
+    send_dt_event "11-Deploy-DT-Config" ',"status":"running"'
 
-    # Run the Monaco setup script (suppressed output by default)
+    # Run the workshop config script (dtctl + Monaco)
     cd ../workshop-config
     ./setup-workshop-config.sh
-    MONACO_RESULT=$?
+    CONFIG_RESULT=$?
     cd ../provision-scripts
 
-    if [ $MONACO_RESULT -eq 0 ]; then
-        print_success "Monaco configuration deployed successfully"
-        send_dt_event "11-Deploy-Monaco-Config" ',"status":"success"'
+    if [ $CONFIG_RESULT -eq 0 ]; then
+        print_success "Dynatrace configuration deployed successfully"
+        send_dt_event "11-Deploy-DT-Config" ',"status":"success"'
     else
-        print_warning "Monaco deployment completed with some issues"
-        send_dt_event "11-Deploy-Monaco-Config" ',"status":"completed with warnings"'
+        print_warning "Dynatrace configuration completed with some issues"
+        send_dt_event "11-Deploy-DT-Config" ',"status":"completed with warnings"'
     fi
 
-    return $MONACO_RESULT
+    return $CONFIG_RESULT
 }
 
 # =============================================================================
@@ -1223,7 +1231,7 @@ configure_workshop_mode() {
     echo "This will perform the following steps:"
     echo "  1. Configure VM with workshop repository and open port 80"
     echo "  2. Save AI Foundry credentials to workshop-credentials.json"
-    echo "  3. Configure Dynatrace settings (K8s experience, vulnerability analytics)"
+    echo "  3. Deploy Dynatrace configuration (dtctl + Monaco)"
     echo "-------------------------------------------------------------------"
 
     # Get Azure Subscription ID
@@ -1280,12 +1288,12 @@ configure_workshop_mode() {
     echo "=========================================="
     save_aifoundry_credentials "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION" "$CREDS_FILE"
 
-    # Step 3: Configure Dynatrace Settings
+    # Step 3: Deploy Dynatrace Configuration (dtctl + Monaco)
     echo ""
     echo "=========================================="
-    echo "Step 3: Configuring Dynatrace Settings"
+    echo "Step 3: Deploying Dynatrace Configuration"
     echo "=========================================="
-    configure_dynatrace_settings "$CREDS_FILE"
+    deploy_monaco_configuration "$CREDS_FILE"
 
     echo ""
     print_header "Workshop Configuration Complete"
@@ -1294,9 +1302,8 @@ configure_workshop_mode() {
     echo "  - VM configured with workshop repository"
     echo "  - Port 80 opened for web traffic"
     echo "  - AI Foundry credentials saved to: $CREDS_FILE"
-    echo "  - Dynatrace: New Kubernetes Experience enabled"
-    echo "  - Dynatrace: Third-Party Vulnerability Analytics enabled"
-    echo "  - Dynatrace: Code-Level Vulnerability Analytics enabled"
+    echo "  - Dynatrace (via dtctl): K8s Experience, Vulnerability Analytics, Auto-tags, MZs, SLOs"
+    echo "  - Dynatrace (via Monaco): Custom Services, Conditional Naming"
     echo ""
 }
 
@@ -1493,8 +1500,7 @@ run_workshop_configuration() {
     echo "This will perform the following steps:"
     echo "  1. Configure VM with workshop repository, Docker, and start monolith app"
     echo "  2. Save AI Foundry credentials to workshop-credentials.json"
-    echo "  3. Update Travel Advisor manifest with AI Foundry and OTEL credentials"
-    echo "  4. Configure Dynatrace settings (K8s experience, vulnerability analytics)"
+    echo "  3. Deploy Dynatrace configuration (dtctl + Monaco)"
     echo ""
 
     # Use defaults
@@ -1513,17 +1519,10 @@ run_workshop_configuration() {
     echo "=========================================="
     save_aifoundry_credentials "$AIFOUNDRY_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_SUBSCRIPTION" "$DEFAULT_CREDS_FILE"
 
-    # Step 3: Configure Dynatrace Settings
+    # Step 3: Deploy Dynatrace Configuration (dtctl + Monaco)
     echo ""
     echo "=========================================="
-    echo "Step 3: Configuring Dynatrace Settings"
-    echo "=========================================="
-    configure_dynatrace_settings "$DEFAULT_CREDS_FILE"
-
-    # Step 4: Deploy Monaco Workshop Configuration
-    echo ""
-    echo "=========================================="
-    echo "Step 4: Deploying Monaco Configuration"
+    echo "Step 3: Deploying Dynatrace Configuration"
     echo "=========================================="
     deploy_monaco_configuration "$DEFAULT_CREDS_FILE"
 
@@ -1536,9 +1535,8 @@ run_workshop_configuration() {
     echo "  - Port 80 opened for web traffic"
     echo "  - AI Foundry credentials saved to: $DEFAULT_CREDS_FILE"
     echo "  - Travel Advisor manifest updated with credentials"
-    echo "  - Dynatrace: New Kubernetes Experience enabled"
-    echo "  - Dynatrace: Vulnerability Analytics enabled"
-    echo "  - Monaco: Auto-tags, Management Zones, and SLOs deployed"
+    echo "  - Dynatrace (via dtctl): K8s Experience, Vulnerability Analytics, Auto-tags, MZs, SLOs"
+    echo "  - Dynatrace (via Monaco): Custom Services, Conditional Naming"
     echo ""
 }
 

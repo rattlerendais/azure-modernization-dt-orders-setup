@@ -1,9 +1,0 @@
-configs:
-  - id: dt-orders-services
-    type:
-      settings:
-        schema: builtin:management-zones
-        scope: environment
-    config:
-      name: dt-orders-services
-      template: dt-orders-services.json

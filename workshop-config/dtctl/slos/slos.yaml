@@ -1,0 +1,34 @@
+# =============================================================================
+# SLO Definitions - dtctl Configuration
+# =============================================================================
+
+slos:
+  # SLO: DT-Orders Monolith Error Rate
+  - name: "DT-Orders Monolith Error Rate"
+    enabled: true
+    evaluationType: AGGREGATE
+    filter: 'mzName("dt-orders-monolith"),type("SERVICE")'
+    target: 95
+    warning: 97
+    timeframe: "-1d"
+    metricExpression: "(100)*(builtin:service.errors.server.successCount:splitBy())/(builtin:service.requestCount.server:splitBy())"
+
+  # SLO: DT-Orders K8 Error Rate
+  - name: "DT-Orders K8 Error Rate"
+    enabled: true
+    evaluationType: AGGREGATE
+    filter: 'mzName("dt-orders-k8"),type("SERVICE")'
+    target: 95
+    warning: 97
+    timeframe: "-1d"
+    metricExpression: "(100)*(builtin:service.errors.server.successCount:splitBy())/(builtin:service.requestCount.server:splitBy())"
+
+  # SLO: DT-Orders Services Error Rate
+  - name: "DT-Orders Services Error Rate"
+    enabled: true
+    evaluationType: AGGREGATE
+    filter: 'mzName("dt-orders-services"),type("SERVICE")'
+    target: 95
+    warning: 97
+    timeframe: "-1d"
+    metricExpression: "(100)*(builtin:service.errors.server.successCount:splitBy())/(builtin:service.requestCount.server:splitBy())"

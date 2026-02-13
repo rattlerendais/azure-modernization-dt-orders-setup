@@ -32,3 +32,24 @@ resources:
 
   # Problem patterns (remote directory with its own kustomization.yaml)
   - https://github.com/Dynatrace/easytrade/kubernetes-manifests/problem-patterns?ref=main
+
+# Patch to reduce loadgen resource requirements
+# Original: 1 CPU / 2Gi memory -> Reduced: 100m CPU / 256Mi memory
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: loadgen
+      spec:
+        template:
+          spec:
+            containers:
+              - name: loadgen
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "200m"
+                    memory: "512Mi"
