@@ -28,7 +28,6 @@ AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-"dynatrace-azure-workshop"}
 AZURE_AKS_CLUSTER_NAME=${AZURE_AKS_CLUSTER_NAME:-"dynatrace-azure-workshop-cluster"}
 
 EASYTRADE_NAMESPACE="easytrade"
-LOCAL_PORT=18094
 
 # Check for --disable flag
 ACTION="enable"
@@ -53,14 +52,15 @@ echo "  Namespace: $EASYTRADE_NAMESPACE"
 echo "  Patterns:  ${PROBLEM_PATTERNS[*]}"
 echo ""
 
-# Function to set feature flag via port-forward
+# Function to set feature flag
 set_feature_flag() {
-    local flag_id="$1"
-    local enabled="$2"
+    local base_url="$1"
+    local flag_id="$2"
+    local enabled="$3"
 
     echo -n "  Setting $flag_id to $enabled... "
 
-    local result=$(curl -s -X PUT "http://localhost:${LOCAL_PORT}/v1/flags/${flag_id}" \
+    local result=$(curl -s -X PUT "${base_url}/feature-flag-service/v1/flags/${flag_id}" \
         -H "Content-Type: application/json" \
         -d "{\"enabled\": ${enabled}}" 2>/dev/null)
 
@@ -79,14 +79,6 @@ set_feature_flag() {
     fi
 }
 
-# Cleanup function
-cleanup() {
-    if [ -n "$PORT_FORWARD_PID" ]; then
-        kill $PORT_FORWARD_PID 2>/dev/null
-    fi
-}
-trap cleanup EXIT
-
 # Get AKS credentials if not already connected
 echo "Checking cluster connection..."
 if ! kubectl cluster-info &>/dev/null; then
@@ -98,39 +90,36 @@ if ! kubectl cluster-info &>/dev/null; then
     fi
 fi
 
-# Verify feature-flag-service is running
-echo "Checking feature-flag-service..."
-if ! kubectl -n "$EASYTRADE_NAMESPACE" get deploy feature-flag-service &>/dev/null; then
-    echo "ERROR: feature-flag-service deployment not found in namespace $EASYTRADE_NAMESPACE"
-    echo "Make sure EasyTrade is deployed first."
+# Get the external IP of frontendreverseproxy
+echo "Getting EasyTrade frontend IP..."
+FRONTEND_IP=$(kubectl -n "$EASYTRADE_NAMESPACE" get svc frontendreverseproxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+
+if [ -z "$FRONTEND_IP" ]; then
+    echo "ERROR: Could not get frontendreverseproxy external IP"
+    echo "Make sure EasyTrade is deployed and the LoadBalancer has an IP assigned."
+    echo ""
+    echo "Check with: kubectl -n $EASYTRADE_NAMESPACE get svc frontendreverseproxy"
     exit 1
 fi
 
-# Wait for feature-flag-service to be ready
-echo "Waiting for feature-flag-service to be ready..."
-kubectl -n "$EASYTRADE_NAMESPACE" wait --for=condition=available deploy/feature-flag-service --timeout=120s &>/dev/null
+BASE_URL="http://${FRONTEND_IP}"
+echo "  Frontend URL: $BASE_URL"
 
-# Start port-forward in background
-echo "Setting up port-forward to feature-flag-service..."
-kubectl -n "$EASYTRADE_NAMESPACE" port-forward svc/feature-flag-service ${LOCAL_PORT}:8080 &>/dev/null &
-PORT_FORWARD_PID=$!
-
-# Wait for port-forward to be ready
-sleep 3
-
-# Verify port-forward is working
-if ! curl -s "http://localhost:${LOCAL_PORT}/v1/flags" &>/dev/null; then
-    echo "ERROR: Unable to connect to feature-flag-service via port-forward"
+# Verify feature-flag-service is accessible
+echo "Checking feature-flag-service connectivity..."
+if ! curl -s "${BASE_URL}/feature-flag-service/v1/flags" &>/dev/null; then
+    echo "ERROR: Unable to connect to feature-flag-service"
     echo "The service may still be starting up. Try again in a few moments."
     exit 1
 fi
+echo "  Connected successfully."
 
 echo ""
 echo "--- ${ACTION^} Problem Patterns ---"
 
 ERRORS=0
 for pattern in "${PROBLEM_PATTERNS[@]}"; do
-    set_feature_flag "$pattern" "$ENABLED_VALUE" || ((ERRORS++))
+    set_feature_flag "$BASE_URL" "$pattern" "$ENABLED_VALUE" || ((ERRORS++))
 done
 
 echo ""
