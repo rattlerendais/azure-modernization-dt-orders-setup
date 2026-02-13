@@ -28,7 +28,7 @@ AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-"dynatrace-azure-workshop"}
 AZURE_AKS_CLUSTER_NAME=${AZURE_AKS_CLUSTER_NAME:-"dynatrace-azure-workshop-cluster"}
 
 EASYTRADE_NAMESPACE="easytrade"
-FEATURE_FLAG_SERVICE="feature-flag-service:8080"
+LOCAL_PORT=18094
 
 # Check for --disable flag
 ACTION="enable"
@@ -53,31 +53,39 @@ echo "  Namespace: $EASYTRADE_NAMESPACE"
 echo "  Patterns:  ${PROBLEM_PATTERNS[*]}"
 echo ""
 
-# Function to set feature flag
+# Function to set feature flag via port-forward
 set_feature_flag() {
     local flag_id="$1"
     local enabled="$2"
 
     echo -n "  Setting $flag_id to $enabled... "
 
-    # Use kubectl exec to call the feature-flag-service from within the cluster
-    local result=$(kubectl -n "$EASYTRADE_NAMESPACE" exec -i deploy/feature-flag-service -- \
-        curl -s -X PUT "http://localhost:8080/v1/flags/${flag_id}" \
+    local result=$(curl -s -X PUT "http://localhost:${LOCAL_PORT}/v1/flags/${flag_id}" \
         -H "Content-Type: application/json" \
         -d "{\"enabled\": ${enabled}}" 2>/dev/null)
 
     if echo "$result" | grep -q "\"enabled\":${enabled}"; then
         echo "OK"
         return 0
-    elif echo "$result" | grep -q "enabled"; then
+    elif echo "$result" | grep -q "\"enabled\""; then
         echo "OK (already set)"
         return 0
     else
         echo "FAILED"
-        echo "       Response: $result"
+        if [ -n "$result" ]; then
+            echo "       Response: $result"
+        fi
         return 1
     fi
 }
+
+# Cleanup function
+cleanup() {
+    if [ -n "$PORT_FORWARD_PID" ]; then
+        kill $PORT_FORWARD_PID 2>/dev/null
+    fi
+}
+trap cleanup EXIT
 
 # Get AKS credentials if not already connected
 echo "Checking cluster connection..."
@@ -100,7 +108,22 @@ fi
 
 # Wait for feature-flag-service to be ready
 echo "Waiting for feature-flag-service to be ready..."
-kubectl -n "$EASYTRADE_NAMESPACE" wait --for=condition=available deploy/feature-flag-service --timeout=60s &>/dev/null
+kubectl -n "$EASYTRADE_NAMESPACE" wait --for=condition=available deploy/feature-flag-service --timeout=120s &>/dev/null
+
+# Start port-forward in background
+echo "Setting up port-forward to feature-flag-service..."
+kubectl -n "$EASYTRADE_NAMESPACE" port-forward svc/feature-flag-service ${LOCAL_PORT}:8080 &>/dev/null &
+PORT_FORWARD_PID=$!
+
+# Wait for port-forward to be ready
+sleep 3
+
+# Verify port-forward is working
+if ! curl -s "http://localhost:${LOCAL_PORT}/v1/flags" &>/dev/null; then
+    echo "ERROR: Unable to connect to feature-flag-service via port-forward"
+    echo "The service may still be starting up. Try again in a few moments."
+    exit 1
+fi
 
 echo ""
 echo "--- ${ACTION^} Problem Patterns ---"
@@ -118,9 +141,6 @@ else
     echo "Completed with $ERRORS error(s)"
 fi
 echo "=========================================================="
-echo ""
-echo "To verify, check the feature flags:"
-echo "  kubectl -n $EASYTRADE_NAMESPACE exec -it deploy/feature-flag-service -- curl -s http://localhost:8080/v1/flags?tag=problem_pattern"
 echo ""
 if [ "$ACTION" == "enable" ]; then
     echo "To disable all problem patterns:"
