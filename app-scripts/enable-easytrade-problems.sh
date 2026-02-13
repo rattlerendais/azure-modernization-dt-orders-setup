@@ -92,13 +92,13 @@ fi
 
 # Get the external IP of frontendreverseproxy
 echo "Getting EasyTrade frontend IP..."
-FRONTEND_IP=$(kubectl -n "$EASYTRADE_NAMESPACE" get svc frontendreverseproxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+FRONTEND_IP=$(kubectl -n "$EASYTRADE_NAMESPACE" get svc frontendreverseproxy-easytrade -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
 
 if [ -z "$FRONTEND_IP" ]; then
-    echo "ERROR: Could not get frontendreverseproxy external IP"
+    echo "ERROR: Could not get frontendreverseproxy-easytrade external IP"
     echo "Make sure EasyTrade is deployed and the LoadBalancer has an IP assigned."
     echo ""
-    echo "Check with: kubectl -n $EASYTRADE_NAMESPACE get svc frontendreverseproxy"
+    echo "Check with: kubectl -n $EASYTRADE_NAMESPACE get svc frontendreverseproxy-easytrade"
     exit 1
 fi
 
