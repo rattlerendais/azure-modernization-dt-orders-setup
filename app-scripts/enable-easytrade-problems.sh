@@ -9,7 +9,7 @@
 #   - factory_crisis: Factory won't produce new cards
 #   - high_cpu_usage: Causes broker-service slowdown and high CPU
 #   - db_not_responding: Database throws errors on new trades
-#   - ergo_aggregator_slowdown: Aggregators receive slow responses
+#   - credit_card_meltdown: OrderController service error
 #
 # Usage: ./enable-easytrade-problems.sh [--disable]
 # ==========================================================
@@ -43,7 +43,7 @@ PROBLEM_PATTERNS=(
     "factory_crisis"
     "high_cpu_usage"
     "db_not_responding"
-    "ergo_aggregator_slowdown"
+    "credit_card_meltdown"
 )
 
 echo "=========================================================="
