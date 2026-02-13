@@ -125,18 +125,25 @@ download_dtctl() {
     esac
 
     print_status "info" "Downloading dtctl v$DTCTL_VERSION ($DTCTL_ARCHIVE)..."
-    rm -f dtctl-bin dtctl.tar.gz
+    rm -f dtctl-bin
+
+    # Create temp directory for extraction (avoids conflict with dtctl/ config directory)
+    DTCTL_TEMP_DIR=$(mktemp -d)
 
     # Download tar.gz archive
-    wget -q -O dtctl.tar.gz "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_ARCHIVE}" 2>/dev/null
+    if wget -q -O "$DTCTL_TEMP_DIR/dtctl.tar.gz" "https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/${DTCTL_ARCHIVE}"; then
+        # Extract binary from archive
+        tar -xzf "$DTCTL_TEMP_DIR/dtctl.tar.gz" -C "$DTCTL_TEMP_DIR" dtctl 2>/dev/null
 
-    if [ -f dtctl.tar.gz ]; then
-        # Extract and rename binary
-        tar -xzf dtctl.tar.gz dtctl 2>/dev/null
-        mv dtctl dtctl-bin 2>/dev/null
-        chmod +x dtctl-bin
-        rm -f dtctl.tar.gz
+        # Move binary to current directory with -bin suffix
+        if [ -f "$DTCTL_TEMP_DIR/dtctl" ]; then
+            mv "$DTCTL_TEMP_DIR/dtctl" ./dtctl-bin
+            chmod +x ./dtctl-bin
+        fi
     fi
+
+    # Cleanup temp directory
+    rm -rf "$DTCTL_TEMP_DIR"
 
     if [ -f dtctl-bin ] && [ -x dtctl-bin ]; then
         print_status "ok" "dtctl v$DTCTL_VERSION installed"
