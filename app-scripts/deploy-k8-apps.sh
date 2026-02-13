@@ -131,6 +131,22 @@ echo ""
 echo "Waiting for pods to initialize..."
 sleep 10
 
+# ==========================================================
+# Enable EasyTrade Problem Patterns
+# ==========================================================
+echo ""
+echo "=========================================================="
+echo "Enabling EasyTrade Problem Patterns"
+echo "=========================================================="
+if [ -f "./enable-easytrade-problems.sh" ]; then
+    # Wait a bit more for feature-flag-service to be ready
+    echo "Waiting for EasyTrade services to stabilize..."
+    sleep 30
+    ./enable-easytrade-problems.sh
+else
+    echo "  SKIPPED: enable-easytrade-problems.sh not found"
+fi
+
 echo ""
 echo "=========================================================="
 echo "Pod Status Summary"
