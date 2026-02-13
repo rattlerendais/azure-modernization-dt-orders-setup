@@ -110,21 +110,32 @@ applySettings20() {
         -H 'cache-control: no-cache' \
         -d "$json_payload")
 
-    local error=$(echo "$response" | jq -r '.error.message // empty')
-    if [ -n "$error" ]; then
-        # Check if it's a "already exists" error - that's OK
-        if echo "$response" | grep -q "already exists"; then
-            print_status "ok" "$config_name (already exists)"
-            return 0
-        fi
-        print_status "fail" "$config_name: $error"
-        if [ "$VERBOSE" = true ]; then
-            echo "       Response: $response"
-        fi
-        return 1
-    else
+    # Check if response is an array (success) or object (might be error)
+    local is_array=$(echo "$response" | jq -r 'if type == "array" then "yes" else "no" end' 2>/dev/null)
+
+    if [ "$is_array" == "yes" ]; then
+        # Success - API returns array of created objects
         print_status "ok" "$config_name"
         return 0
+    else
+        # Check for error message
+        local error=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
+        if [ -n "$error" ]; then
+            # Check if it's a "already exists" error - that's OK
+            if echo "$response" | grep -q "already exists"; then
+                print_status "ok" "$config_name (already exists)"
+                return 0
+            fi
+            print_status "fail" "$config_name: $error"
+            if [ "$VERBOSE" = true ]; then
+                echo "       Response: $response"
+            fi
+            return 1
+        else
+            # Unknown response format, but no error - assume success
+            print_status "ok" "$config_name"
+            return 0
+        fi
     fi
 }
 
