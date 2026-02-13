@@ -1,0 +1,5 @@
+{
+  "matcher": "CONTAINS",
+  "pattern": "easytrade",
+  "applicationId": "{{ .applicationId }}"
+}

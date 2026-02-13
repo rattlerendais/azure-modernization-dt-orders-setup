@@ -1,0 +1,37 @@
+{
+  "enabled": true,
+  "ruleName": "{{ .name }}",
+  "triggers": [
+    {
+      "source": { "dataSource": "request.method" },
+      "type": "EQUALS",
+      "value": "PUT",
+      "caseSensitive": false
+    },
+    {
+      "source": { "dataSource": "request.path" },
+      "type": "CONTAINS",
+      "value": "/v1/flags/",
+      "caseSensitive": false
+    }
+  ],
+  "event": {
+    "provider": {
+      "sourceType": "constant.string",
+      "source": "www.easytrade.com"
+    },
+    "type": {
+      "sourceType": "constant.string",
+      "source": "com.easytrade.feature-flag-toggle"
+    },
+    "category": {
+      "sourceType": "request.path"
+    },
+    "data": [
+      {
+        "name": "enabled",
+        "source": { "sourceType": "request.body", "path": "enabled" }
+      }
+    ]
+  }
+}

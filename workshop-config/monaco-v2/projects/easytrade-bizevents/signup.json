@@ -1,0 +1,37 @@
+{
+  "enabled": true,
+  "ruleName": "{{ .name }}",
+  "triggers": [
+    {
+      "source": { "dataSource": "request.method" },
+      "type": "EQUALS",
+      "value": "POST",
+      "caseSensitive": false
+    },
+    {
+      "source": { "dataSource": "request.path" },
+      "type": "ENDS_WITH",
+      "value": "/api/Signup",
+      "caseSensitive": false
+    }
+  ],
+  "event": {
+    "provider": {
+      "sourceType": "constant.string",
+      "source": "www.easytrade.com"
+    },
+    "type": {
+      "sourceType": "constant.string",
+      "source": "com.easytrade.signup"
+    },
+    "category": {
+      "sourceType": "request.path"
+    },
+    "data": [
+      {
+        "name": "email",
+        "source": { "sourceType": "request.body", "path": "email" }
+      }
+    ]
+  }
+}

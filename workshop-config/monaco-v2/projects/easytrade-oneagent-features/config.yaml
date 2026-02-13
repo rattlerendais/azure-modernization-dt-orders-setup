@@ -1,0 +1,44 @@
+configs:
+  # Enable HTTP request capturing for .NET services
+  - id: http-dotnet
+    config:
+      name: HTTP request capturing for .NET
+      template: http-dotnet.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:oneagent.features
+        scope: environment
+
+  # Enable HTTP request capturing for Java services
+  - id: http-java
+    config:
+      name: HTTP request capturing for Java
+      template: http-java.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:oneagent.features
+        scope: environment
+
+  # Enable HTTP request capturing for Go services
+  - id: http-go
+    config:
+      name: HTTP request capturing for Go
+      template: http-go.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:oneagent.features
+        scope: environment
+
+  # Enable HTTP request capturing for Node.js services
+  - id: http-nodejs
+    config:
+      name: HTTP request capturing for Node.js
+      template: http-nodejs.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:oneagent.features
+        scope: environment

@@ -1,0 +1,145 @@
+configs:
+  # ============================================
+  # LOGIN SERVICE (.NET) - Authentication Events
+  # ============================================
+  - id: easytrade_loginservice_login
+    config:
+      name: EasyTrade [loginservice | .NET] - POST /api/Login
+      template: login.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_loginservice_logout
+    config:
+      name: EasyTrade [loginservice | .NET] - POST /api/Logout
+      template: logout.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_loginservice_signup
+    config:
+      name: EasyTrade [loginservice | .NET] - POST /api/Signup
+      template: signup.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  # ============================================
+  # BROKER SERVICE (.NET) - Trading Events
+  # ============================================
+  - id: easytrade_broker-service_quick-buy
+    config:
+      name: EasyTrade [broker-service | .NET] - POST /v1/trade/buy
+      template: trade-buy.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_broker-service_quick-sell
+    config:
+      name: EasyTrade [broker-service | .NET] - POST /v1/trade/sell
+      template: trade-sell.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_broker-service_long-buy
+    config:
+      name: EasyTrade [broker-service | .NET] - POST /v1/trade/long/buy
+      template: trade-long-buy.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_broker-service_long-sell
+    config:
+      name: EasyTrade [broker-service | .NET] - POST /v1/trade/long/sell
+      template: trade-long-sell.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  # ============================================
+  # BROKER SERVICE (.NET) - Balance Events
+  # ============================================
+  - id: easytrade_broker-service_deposit
+    config:
+      name: EasyTrade [broker-service | .NET] - POST /v1/balance/{accountId}/deposit
+      template: balance-deposit.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_broker-service_withdraw
+    config:
+      name: EasyTrade [broker-service | .NET] - POST /v1/balance/{accountId}/withdraw
+      template: balance-withdraw.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_broker-service_get-balance
+    config:
+      name: EasyTrade [broker-service | .NET] - GET /v1/balance/{accountId}
+      template: balance-get.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  # ============================================
+  # CREDIT CARD ORDER SERVICE (Java) - Card Events
+  # ============================================
+  - id: easytrade_credit-card-order-service_order
+    config:
+      name: EasyTrade [credit-card-order-service | Java] - POST /v1/orders
+      template: credit-card-order.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  - id: easytrade_credit-card-order-service_get-status
+    config:
+      name: EasyTrade [credit-card-order-service | Java] - GET /v1/orders/{accountId}/status
+      template: credit-card-status.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment
+
+  # ============================================
+  # FEATURE FLAG SERVICE (Java)
+  # ============================================
+  - id: easytrade_feature-flag-service_toggle-flag
+    config:
+      name: EasyTrade [feature-flag-service | Java] - PUT /v1/flags/{flagId}
+      template: feature-flag-toggle.json
+      skip: false
+    type:
+      settings:
+        schema: builtin:bizevents.http.incoming
+        scope: environment

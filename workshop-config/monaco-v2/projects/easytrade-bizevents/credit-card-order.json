@@ -1,0 +1,45 @@
+{
+  "enabled": true,
+  "ruleName": "{{ .name }}",
+  "triggers": [
+    {
+      "source": { "dataSource": "request.method" },
+      "type": "EQUALS",
+      "value": "POST",
+      "caseSensitive": false
+    },
+    {
+      "source": { "dataSource": "request.path" },
+      "type": "EQUALS",
+      "value": "/v1/orders",
+      "caseSensitive": false
+    }
+  ],
+  "event": {
+    "provider": {
+      "sourceType": "constant.string",
+      "source": "www.easytrade.com"
+    },
+    "type": {
+      "sourceType": "constant.string",
+      "source": "com.easytrade.credit-card-order"
+    },
+    "category": {
+      "sourceType": "request.path"
+    },
+    "data": [
+      {
+        "name": "accountId",
+        "source": { "sourceType": "request.body", "path": "accountId" }
+      },
+      {
+        "name": "email",
+        "source": { "sourceType": "request.body", "path": "shippingAddress.email" }
+      },
+      {
+        "name": "name",
+        "source": { "sourceType": "request.body", "path": "shippingAddress.name" }
+      }
+    ]
+  }
+}

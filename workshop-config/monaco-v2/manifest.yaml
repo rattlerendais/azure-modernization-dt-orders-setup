@@ -3,8 +3,7 @@ manifestVersion: 1.0
 # =============================================================================
 # Monaco v2 Configuration for DT-Orders Workshop
 # =============================================================================
-# NOTE: This manifest only contains Classic API configurations.
-# Settings 2.0 and SLOs have been migrated to dtctl (see ../dtctl/).
+# This manifest contains both Classic API and Settings 2.0 configurations.
 # =============================================================================
 
 projects:
@@ -20,9 +19,21 @@ projects:
   - name: synthetics
     path: projects/synthetics
 
-  # Classic API: Custom Service (.NET)
+  # Classic API: Custom Service (.NET) for EasyTrade
   - name: easytrade
     path: projects/easytrade
+
+  # Settings 2.0: OneAgent Features for BizEvent Capturing
+  - name: easytrade-oneagent-features
+    path: projects/easytrade-oneagent-features
+
+  # Settings 2.0: EasyTrade Business Events Capturing Rules
+  - name: easytrade-bizevents
+    path: projects/easytrade-bizevents
+
+  # Classic API + Settings 2.0: EasyTrade Web Application & Detection
+  - name: easytrade-application
+    path: projects/easytrade-application
 
 environmentGroups:
   - name: default

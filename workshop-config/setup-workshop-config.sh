@@ -384,6 +384,24 @@ run_monaco_classic_configs() {
     return $RESULT
 }
 
+run_monaco_easytrade_configs() {
+    local RESULT=0
+
+    echo ""
+    echo "--- Monaco: EasyTrade Configuration ---"
+
+    # Deploy OneAgent features for bizevent capturing (must be first)
+    run_monaco_with_retry easytrade-oneagent-features || RESULT=1
+
+    # Deploy EasyTrade web application
+    run_monaco_with_retry easytrade-application || RESULT=1
+
+    # Deploy EasyTrade business events capturing rules
+    run_monaco_with_retry easytrade-bizevents || RESULT=1
+
+    return $RESULT
+}
+
 # =============================================================================
 # Custom Dynatrace Config (Direct API)
 # =============================================================================
@@ -468,9 +486,14 @@ case "$SETUP_TYPE" in
             echo "=== Step 3: Monaco Deployment (Classic API) ==="
             run_monaco_classic_configs || OVERALL_RESULT=1
 
-            # Step 4: Apply custom Dynatrace settings
+            # Step 4: Deploy EasyTrade BizEvents & Application configs
             echo ""
-            echo "=== Step 4: Custom Dynatrace Settings ==="
+            echo "=== Step 4: EasyTrade BizEvents & Application ==="
+            run_monaco_easytrade_configs || OVERALL_RESULT=1
+
+            # Step 5: Apply custom Dynatrace settings
+            echo ""
+            echo "=== Step 5: Custom Dynatrace Settings ==="
             run_custom_dynatrace_config
         fi
         ;;

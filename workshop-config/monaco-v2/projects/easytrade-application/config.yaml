@@ -1,0 +1,26 @@
+configs:
+  # EasyTrade Web Application
+  - id: easytrade-app
+    config:
+      name: EasyTrade
+      template: easytrade-app.json
+      skip: false
+    type:
+      api: application-web
+
+  # Application detection rule - matches EasyTrade frontend domain
+  - id: easytrade-app-detection
+    config:
+      name: EasyTrade App Detection
+      template: easytrade-app-detection.json
+      skip: false
+      parameters:
+        applicationId:
+          type: reference
+          configType: application-web
+          configId: easytrade-app
+          property: id
+    type:
+      settings:
+        schema: builtin:rum.web.app-detection
+        scope: environment
