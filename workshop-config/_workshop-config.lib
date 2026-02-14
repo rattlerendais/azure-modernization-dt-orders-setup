@@ -4,9 +4,17 @@ CREDS_FILE=../gen/workshop-credentials.json
 
 if [ -f "$CREDS_FILE" ]
 then
+    # Classic API credentials (Gen2)
     DT_BASEURL=$(cat $CREDS_FILE | jq -r '.DT_BASEURL')
     DT_API_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_API_TOKEN')
-else 
+
+    # Platform API credentials (Gen3)
+    DT_BASEURL_PLATFORM=$(cat $CREDS_FILE | jq -r '.DT_BASEURL_PLATFORM // empty')
+    DT_BASEURL_LIVE=$(cat $CREDS_FILE | jq -r '.DT_BASEURL_LIVE // empty')
+    DT_PLATFORM_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_PLATFORM_TOKEN // empty')
+    DT_ENVIRONMENT_ID=$(cat $CREDS_FILE | jq -r '.DT_ENVIRONMENT_ID // empty')
+    EMAIL=$(cat $CREDS_FILE | jq -r '.EMAIL // empty')
+else
   echo "ABORT: CREDS_FILE: $CREDS_FILE not found"
   exit 1
 fi
