@@ -35,16 +35,6 @@ echo "  Connected successfully."
 echo ""
 
 # ==========================================================
-# Restart Hipster Shop
-# ==========================================================
-echo "Restarting Hipster Shop (namespace: hipstershop)..."
-if kubectl -n hipstershop rollout restart deployment 2>/dev/null; then
-    echo "  Done."
-else
-    echo "  WARNING: No deployments found or namespace doesn't exist"
-fi
-
-# ==========================================================
 # Restart DT Orders
 # ==========================================================
 echo "Restarting DT Orders (namespace: staging)..."
@@ -70,7 +60,6 @@ echo "Restart Complete!"
 echo "=========================================================="
 echo ""
 echo "Check pod status with:"
-echo "  kubectl -n hipstershop get pods"
 echo "  kubectl -n staging get pods"
 echo "  kubectl -n travel-advisor-azure-openai-sample get pods"
 echo ""

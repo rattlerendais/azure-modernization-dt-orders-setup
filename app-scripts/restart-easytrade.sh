@@ -11,13 +11,13 @@ fi
 AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-"dynatrace-azure-workshop"}
 AZURE_AKS_CLUSTER_NAME=${AZURE_AKS_CLUSTER_NAME:-"dynatrace-azure-workshop-cluster"}
 
-echo "Restarting Hipster Shop..."
+echo "Restarting EasyTrade..."
 az aks get-credentials --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_AKS_CLUSTER_NAME" --overwrite-existing &>/dev/null
 
-if kubectl -n hipstershop rollout restart deployment; then
+if kubectl -n easytrade rollout restart deployment; then
     echo "Done. Pods are restarting."
     echo ""
-    echo "Check status: kubectl -n hipstershop get pods"
+    echo "Check status: kubectl -n easytrade get pods"
 else
     echo "ERROR: Failed to restart. Check if namespace exists."
 fi
