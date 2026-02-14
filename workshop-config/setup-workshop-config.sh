@@ -551,36 +551,106 @@ upload_notebooks() {
     echo ""
     echo "--- Uploading Workshop Notebooks ---"
 
+    local RESULT=0
+
+    # Part 1: Upload YAML notebooks via dtctl (if any)
     local DTCTL="./dtctl"
     [ -f "./dtctl.exe" ] && DTCTL="./dtctl.exe"
 
     local NOTEBOOKS_DIR="./notebooks"
-    local RESULT=0
+    if [ -d "$NOTEBOOKS_DIR" ]; then
+        local YAML_COUNT=$(find "$NOTEBOOKS_DIR" -name "*.yaml" -o -name "*.yml" 2>/dev/null | wc -l)
+        if [ "$YAML_COUNT" -gt 0 ]; then
+            print_status "info" "Uploading YAML notebooks via dtctl..."
+            for notebook in "$NOTEBOOKS_DIR"/*.yaml "$NOTEBOOKS_DIR"/*.yml; do
+                [ -e "$notebook" ] || continue
 
-    if [ ! -d "$NOTEBOOKS_DIR" ]; then
-        print_status "info" "No notebooks directory found, skipping"
-        return 0
-    fi
+                local NOTEBOOK_NAME=$(basename "$notebook")
+                print_status "info" "Uploading: $NOTEBOOK_NAME"
 
-    local NOTEBOOK_COUNT=$(find "$NOTEBOOKS_DIR" -name "*.yaml" -o -name "*.yml" 2>/dev/null | wc -l)
-    if [ "$NOTEBOOK_COUNT" -eq 0 ]; then
-        print_status "info" "No notebooks found to upload"
-        return 0
-    fi
-
-    for notebook in "$NOTEBOOKS_DIR"/*.yaml "$NOTEBOOKS_DIR"/*.yml; do
-        [ -e "$notebook" ] || continue
-
-        local NOTEBOOK_NAME=$(basename "$notebook")
-        print_status "info" "Uploading: $NOTEBOOK_NAME"
-
-        if $DTCTL apply -f "$notebook" 2>/dev/null; then
-            print_status "ok" "$NOTEBOOK_NAME"
-        else
-            print_status "fail" "$NOTEBOOK_NAME"
-            ((RESULT++))
+                if $DTCTL apply -f "$notebook" 2>/dev/null; then
+                    print_status "ok" "$NOTEBOOK_NAME"
+                else
+                    print_status "fail" "$NOTEBOOK_NAME"
+                    ((RESULT++))
+                fi
+            done
         fi
-    done
+    fi
+
+    # Part 2: Upload JSON notebooks via Documents API (app-scripts/resources)
+    local JSON_NOTEBOOKS_DIR="../app-scripts/resources"
+    if [ -d "$JSON_NOTEBOOKS_DIR" ]; then
+        local JSON_COUNT=$(find "$JSON_NOTEBOOKS_DIR" -name "*.json" 2>/dev/null | wc -l)
+        if [ "$JSON_COUNT" -gt 0 ]; then
+            echo ""
+            print_status "info" "Uploading JSON notebooks via Documents API..."
+
+            for notebook in "$JSON_NOTEBOOKS_DIR"/*.json; do
+                [ -e "$notebook" ] || continue
+
+                local NOTEBOOK_NAME=$(basename "$notebook" .json)
+                print_status "info" "Uploading: $NOTEBOOK_NAME"
+
+                # Read notebook content
+                local NOTEBOOK_CONTENT=$(cat "$notebook")
+
+                # Create the document payload
+                local PAYLOAD=$(jq -n \
+                    --arg name "$NOTEBOOK_NAME" \
+                    --arg content "$NOTEBOOK_CONTENT" \
+                    '{
+                        "name": $name,
+                        "type": "notebook",
+                        "isPrivate": false,
+                        "content": $content
+                    }')
+
+                # Upload using Documents API
+                local RESPONSE=$(curl -s -w "\n%{http_code}" \
+                    -X POST "${DT_BASEURL_PLATFORM}/platform/document/v1/documents" \
+                    -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d "$PAYLOAD" 2>/dev/null)
+
+                local HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                local BODY=$(echo "$RESPONSE" | sed '$d')
+
+                if [ "$HTTP_CODE" == "201" ] || [ "$HTTP_CODE" == "200" ]; then
+                    print_status "ok" "$NOTEBOOK_NAME"
+                elif [ "$HTTP_CODE" == "409" ]; then
+                    # Document already exists - try to find and update it
+                    local ENCODED_NAME=$(echo "$NOTEBOOK_NAME" | jq -sRr @uri)
+                    local EXISTING=$(curl -s \
+                        "${DT_BASEURL_PLATFORM}/platform/document/v1/documents?filter=name%3D%3D%27${ENCODED_NAME}%27%26type%3D%3D%27notebook%27" \
+                        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" 2>/dev/null)
+
+                    local DOC_ID=$(echo "$EXISTING" | jq -r '.documents[0].id // empty')
+
+                    if [ -n "$DOC_ID" ] && [ "$DOC_ID" != "null" ]; then
+                        # Update existing document
+                        local UPDATE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                            -X PUT "${DT_BASEURL_PLATFORM}/platform/document/v1/documents/${DOC_ID}" \
+                            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+                            -H "Content-Type: application/json" \
+                            -d "$PAYLOAD" 2>/dev/null)
+
+                        if [ "$UPDATE_CODE" == "200" ]; then
+                            print_status "ok" "$NOTEBOOK_NAME (updated)"
+                        else
+                            print_status "fail" "$NOTEBOOK_NAME (update failed: HTTP $UPDATE_CODE)"
+                            ((RESULT++))
+                        fi
+                    else
+                        print_status "ok" "$NOTEBOOK_NAME (already exists)"
+                    fi
+                else
+                    print_status "fail" "$NOTEBOOK_NAME (HTTP $HTTP_CODE)"
+                    ((RESULT++))
+                fi
+            done
+        fi
+    fi
 
     if [ $RESULT -eq 0 ]; then
         send_event "09-WorkshopConfig-Upload-Notebooks" "success"
