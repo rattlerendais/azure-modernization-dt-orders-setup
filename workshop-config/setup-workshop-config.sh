@@ -59,10 +59,16 @@ send_event() {
     local status="${2:-running}"
     local project="${3:-}"
 
+    # Append -FAILED to step name if status is failed (for dashboard filtering)
+    local step_name="$step"
+    if [ "$status" == "failed" ]; then
+        step_name="${step}-FAILED"
+    fi
+
     local JSON_EVENT=$(cat <<EOF
 {
   "id": "1",
-  "step": "$step",
+  "step": "$step_name",
   "status": "$status",
   "project": "$project",
   "event.provider": "azure-workshop-provisioning",
