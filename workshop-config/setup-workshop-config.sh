@@ -295,7 +295,15 @@ enableVulnerabilityAnalytics() {
                 "globalMonitoringModeDotNet": "MONITORING_ON",
                 "globalMonitoringModeGo": "MONITORING_ON",
                 "globalMonitoringModeNodeJs": "MONITORING_ON",
-                "technologies": {}
+                "technologies": {
+                    "enableJava": true,
+                    "enableDotNet": true,
+                    "enableGo": true,
+                    "enableNodeJs": true,
+                    "enablePython": true,
+                    "enableKubernetes": true,
+                    "enablePhp": true
+                }
             }
         }'
 
@@ -340,7 +348,15 @@ enableVulnerabilityAnalytics() {
                     "globalMonitoringModeDotNet": "MONITORING_ON",
                     "globalMonitoringModeGo": "MONITORING_ON",
                     "globalMonitoringModeNodeJs": "MONITORING_ON",
-                    "technologies": {}
+                    "technologies": {
+                        "enableJava": true,
+                        "enableDotNet": true,
+                        "enableGo": true,
+                        "enableNodeJs": true,
+                        "enablePython": true,
+                        "enableKubernetes": true,
+                        "enablePhp": true
+                    }
                 }
             }]')
 
