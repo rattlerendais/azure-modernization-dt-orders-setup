@@ -50,27 +50,6 @@ clear
 echo "==================================================================="
 echo -e "${YLW}Dynatrace Azure Workshop - Credentials Setup${NC}"
 echo "==================================================================="
-echo ""
-echo -e "${YLW}BEFORE YOU BEGIN:${NC}"
-echo "You need to create a Platform Token in Dynatrace with these scopes:"
-echo ""
-echo -e "${GRN}Required Platform Token Scopes (copy these):${NC}"
-echo "  settings:objects:read"
-echo "  settings:objects:write"
-echo "  settings:schemas:read"
-echo "  document:documents:read"
-echo "  document:documents:write"
-echo "  app-engine:apps:run"
-echo ""
-echo "To create the token:"
-echo "  1. Go to Dynatrace > Access Tokens"
-echo "  2. Click 'Generate new token'"
-echo "  3. Select 'Platform token'"
-echo "  4. Name it: 'azure-workshop'"
-echo "  5. Add the 6 scopes listed above"
-echo "  6. Click 'Generate token' and copy it"
-echo ""
-echo "==================================================================="
 echo -e "${YLW}Enter your credentials:${NC}"
 echo "Press <enter> to keep the current value"
 echo "==================================================================="
@@ -168,8 +147,9 @@ fi
 # Verify token works by making a simple API call
 echo ""
 echo "Verifying Platform Token..."
+# Use Settings 2.0 schemas endpoint to verify token (requires settings:schemas:read scope)
 VERIFY_RESULT=$(curl -s -o /dev/null -w "%{http_code}" \
-    "${DT_BASEURL_PLATFORM}/platform/metadata/v1/tenants" \
+    "${DT_BASEURL_PLATFORM}/platform/classic/environment-api/v2/settings/schemas" \
     -H "Authorization: Bearer $DT_PLATFORM_TOKEN" 2>/dev/null)
 
 if [ "$VERIFY_RESULT" == "200" ]; then
