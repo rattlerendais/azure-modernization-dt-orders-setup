@@ -286,7 +286,10 @@ enableVulnerabilityAnalytics() {
                 "globalMonitoringModeTPV": "MONITORING_ON",
                 "enableCodeLevelVulnerabilityDetection": true,
                 "globalMonitoringModeJava": "MONITORING_ON",
-                "globalMonitoringModeDotNet": "MONITORING_ON"
+                "globalMonitoringModeDotNet": "MONITORING_ON",
+                "globalMonitoringModeGo": "MONITORING_ON",
+                "globalMonitoringModeNodeJs": "MONITORING_ON",
+                "technologies": ["DOTNET", "GO", "JAVA", "NODEJS"]
             }
         }'
 
@@ -328,7 +331,10 @@ enableVulnerabilityAnalytics() {
                     "globalMonitoringModeTPV": "MONITORING_ON",
                     "enableCodeLevelVulnerabilityDetection": true,
                     "globalMonitoringModeJava": "MONITORING_ON",
-                    "globalMonitoringModeDotNet": "MONITORING_ON"
+                    "globalMonitoringModeDotNet": "MONITORING_ON",
+                    "globalMonitoringModeGo": "MONITORING_ON",
+                    "globalMonitoringModeNodeJs": "MONITORING_ON",
+                    "technologies": ["DOTNET", "GO", "JAVA", "NODEJS"]
                 }
             }]')
 
@@ -462,7 +468,10 @@ run_monaco_easytrade_configs() {
     echo "--- Monaco: EasyTrade Settings 2.0 Configuration ---"
 
     # Deploy OneAgent features for bizevent capturing (must be first)
-    run_monaco_with_retry easytrade-oneagent-features || RESULT=1
+    # Note: This requires "devops admin" role - make it non-fatal if it fails
+    if ! run_monaco_with_retry easytrade-oneagent-features; then
+        echo "       (OneAgent features requires 'devops admin' role - continuing...)"
+    fi
 
     # Deploy EasyTrade business events capturing rules
     run_monaco_with_retry easytrade-bizevents || RESULT=1
@@ -579,6 +588,7 @@ upload_notebooks() {
     fi
 
     # Part 2: Upload JSON notebooks via Documents API (app-scripts/resources)
+    # The Documents API v1 requires multipart/form-data format
     local JSON_NOTEBOOKS_DIR="../app-scripts/resources"
     if [ -d "$JSON_NOTEBOOKS_DIR" ]; then
         local JSON_COUNT=$(find "$JSON_NOTEBOOKS_DIR" -name "*.json" 2>/dev/null | wc -l)
@@ -592,26 +602,14 @@ upload_notebooks() {
                 local NOTEBOOK_NAME=$(basename "$notebook" .json)
                 print_status "info" "Uploading: $NOTEBOOK_NAME"
 
-                # Read notebook content
-                local NOTEBOOK_CONTENT=$(cat "$notebook")
-
-                # Create the document payload
-                local PAYLOAD=$(jq -n \
-                    --arg name "$NOTEBOOK_NAME" \
-                    --arg content "$NOTEBOOK_CONTENT" \
-                    '{
-                        "name": $name,
-                        "type": "notebook",
-                        "isPrivate": false,
-                        "content": $content
-                    }')
-
-                # Upload using Documents API
+                # Upload using Documents API with multipart/form-data
                 local RESPONSE=$(curl -s -w "\n%{http_code}" \
                     -X POST "${DT_BASEURL_PLATFORM}/platform/document/v1/documents" \
                     -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
-                    -H "Content-Type: application/json" \
-                    -d "$PAYLOAD" 2>/dev/null)
+                    -F "name=$NOTEBOOK_NAME" \
+                    -F "type=notebook" \
+                    -F "isPrivate=false" \
+                    -F "content=@$notebook;type=application/json" 2>/dev/null)
 
                 local HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
                 local BODY=$(echo "$RESPONSE" | sed '$d')
@@ -628,12 +626,14 @@ upload_notebooks() {
                     local DOC_ID=$(echo "$EXISTING" | jq -r '.documents[0].id // empty')
 
                     if [ -n "$DOC_ID" ] && [ "$DOC_ID" != "null" ]; then
-                        # Update existing document
+                        # Update existing document with multipart/form-data
                         local UPDATE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
                             -X PUT "${DT_BASEURL_PLATFORM}/platform/document/v1/documents/${DOC_ID}" \
                             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
-                            -H "Content-Type: application/json" \
-                            -d "$PAYLOAD" 2>/dev/null)
+                            -F "name=$NOTEBOOK_NAME" \
+                            -F "type=notebook" \
+                            -F "isPrivate=false" \
+                            -F "content=@$notebook;type=application/json" 2>/dev/null)
 
                         if [ "$UPDATE_CODE" == "200" ]; then
                             print_status "ok" "$NOTEBOOK_NAME (updated)"

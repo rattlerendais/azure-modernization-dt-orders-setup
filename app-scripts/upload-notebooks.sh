@@ -57,27 +57,14 @@ for notebook in "$NOTEBOOKS_DIR"/*.json; do
     NOTEBOOK_NAME=$(basename "$notebook" .json)
     echo -n "  Uploading: $NOTEBOOK_NAME... "
 
-    # Read notebook content
-    NOTEBOOK_CONTENT=$(cat "$notebook")
-
-    # Create the document payload
-    # The Documents API expects: name, type, content, isPrivate
-    PAYLOAD=$(jq -n \
-        --arg name "$NOTEBOOK_NAME" \
-        --arg content "$NOTEBOOK_CONTENT" \
-        '{
-            "name": $name,
-            "type": "notebook",
-            "isPrivate": false,
-            "content": $content
-        }')
-
-    # Upload using Documents API
+    # Upload using Documents API with multipart/form-data (required by API v1)
     RESPONSE=$(curl -s -w "\n%{http_code}" \
         -X POST "${DT_BASEURL_PLATFORM}/platform/document/v1/documents" \
         -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD" 2>/dev/null)
+        -F "name=$NOTEBOOK_NAME" \
+        -F "type=notebook" \
+        -F "isPrivate=false" \
+        -F "content=@$notebook;type=application/json" 2>/dev/null)
 
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     BODY=$(echo "$RESPONSE" | sed '$d')
@@ -87,21 +74,22 @@ for notebook in "$NOTEBOOKS_DIR"/*.json; do
     elif [ "$HTTP_CODE" == "409" ]; then
         # Document already exists, try to update it
         # First, find the document ID
+        ENCODED_NAME=$(echo "$NOTEBOOK_NAME" | jq -sRr @uri)
         EXISTING=$(curl -s \
-            "${DT_BASEURL_PLATFORM}/platform/document/v1/documents?filter=name%3D%3D%27${NOTEBOOK_NAME}%27%26type%3D%3D%27notebook%27" \
+            "${DT_BASEURL_PLATFORM}/platform/document/v1/documents?filter=name%3D%3D%27${ENCODED_NAME}%27%26type%3D%3D%27notebook%27" \
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" 2>/dev/null)
 
         DOC_ID=$(echo "$EXISTING" | jq -r '.documents[0].id // empty')
 
         if [ -n "$DOC_ID" ]; then
-            # Update existing document
-            UPDATE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            # Update existing document with multipart/form-data
+            UPDATE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X PUT "${DT_BASEURL_PLATFORM}/platform/document/v1/documents/${DOC_ID}" \
                 -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "$PAYLOAD" 2>/dev/null)
-
-            UPDATE_CODE=$(echo "$UPDATE_RESPONSE" | tail -n1)
+                -F "name=$NOTEBOOK_NAME" \
+                -F "type=notebook" \
+                -F "isPrivate=false" \
+                -F "content=@$notebook;type=application/json" 2>/dev/null)
 
             if [ "$UPDATE_CODE" == "200" ]; then
                 echo "UPDATED"
