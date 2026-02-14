@@ -288,8 +288,7 @@ enableVulnerabilityAnalytics() {
                 "globalMonitoringModeJava": "MONITORING_ON",
                 "globalMonitoringModeDotNet": "MONITORING_ON",
                 "globalMonitoringModeGo": "MONITORING_ON",
-                "globalMonitoringModeNodeJs": "MONITORING_ON",
-                "technologies": ["DOTNET", "GO", "JAVA", "NODEJS"]
+                "globalMonitoringModeNodeJs": "MONITORING_ON"
             }
         }'
 
@@ -333,8 +332,7 @@ enableVulnerabilityAnalytics() {
                     "globalMonitoringModeJava": "MONITORING_ON",
                     "globalMonitoringModeDotNet": "MONITORING_ON",
                     "globalMonitoringModeGo": "MONITORING_ON",
-                    "globalMonitoringModeNodeJs": "MONITORING_ON",
-                    "technologies": ["DOTNET", "GO", "JAVA", "NODEJS"]
+                    "globalMonitoringModeNodeJs": "MONITORING_ON"
                 }
             }]')
 
