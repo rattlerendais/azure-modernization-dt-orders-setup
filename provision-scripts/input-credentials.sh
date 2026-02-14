@@ -64,10 +64,6 @@ echo ""
 echo "Dynatrace Platform Token (starts with dt0s16.)"
 read -p "                         (current: ${DT_PLATFORM_TOKEN:+****${DT_PLATFORM_TOKEN: -8}}) : " DT_PLATFORM_TOKEN_NEW
 
-# Collect Azure Subscription
-echo ""
-read -p "Azure Subscription ID    (current: $AZURE_SUBSCRIPTION) : " AZURE_SUBSCRIPTION_NEW
-
 echo ""
 echo "==================================================================="
 
@@ -75,7 +71,7 @@ echo "==================================================================="
 RESOURCE_PREFIX=${RESOURCE_PREFIX_NEW:-$RESOURCE_PREFIX}
 DT_BASEURL=${DT_BASEURL_NEW:-$DT_BASEURL}
 DT_PLATFORM_TOKEN=${DT_PLATFORM_TOKEN_NEW:-$DT_PLATFORM_TOKEN}
-AZURE_SUBSCRIPTION=${AZURE_SUBSCRIPTION_NEW:-$AZURE_SUBSCRIPTION}
+# Azure Subscription is auto-detected from az account list
 
 # Set resource names based on prefix
 if [ -n "$RESOURCE_PREFIX" ]; then
@@ -224,15 +220,6 @@ echo -e "${GRN}Credentials saved to: $CREDS_FILE${NC}"
 
 # Send credentials saved event
 send_dt_event "01-Input-credentials-SAVED" ',"status":"Credentials saved successfully"'
-
-echo ""
-echo "========================================================================================================"
-echo -e "${YLW}***** IMPORTANT: Save these values for Lab 3 (Dynatrace Operator Installation) *****${NC}"
-echo "--------------------------------------------------------------------------------------------------------"
-echo "Dynatrace Operator Token : $DT_PLATFORM_TOKEN"
-echo "Dynatrace API URL        : ${DT_BASEURL_LIVE}/api"
-echo "========================================================================================================"
-echo ""
 
 # Send final completion event
 JSON_EVENT=$(cat <<EOF
