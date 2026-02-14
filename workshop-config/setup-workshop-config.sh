@@ -259,6 +259,34 @@ enableKubernetesAppExperience() {
     return $RESULT
 }
 
+# Enable Vulnerability Analytics (Third-Party + Code-Level)
+enableVulnerabilityAnalytics() {
+    send_event "07-WorkshopConfig-VulnerabilityAnalytics" "running"
+    echo ""
+    echo "--- Enabling Vulnerability Analytics ---"
+
+    applySettings20 "vulnerability-analytics" '[{
+        "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+        "scope": "environment",
+        "value": {
+            "enableRuntimeVulnerabilityDetection": true,
+            "globalMonitoringModeTPV": "MONITORING_ON",
+            "enableCodeLevelVulnerabilityDetection": true,
+            "globalMonitoringModeJava": "MONITORING_ON",
+            "globalMonitoringModeDotNet": "MONITORING_ON"
+        }
+    }]'
+
+    local RESULT=$?
+    if [ $RESULT -eq 0 ]; then
+        send_event "07-WorkshopConfig-VulnerabilityAnalytics" "success"
+    else
+        send_event "07-WorkshopConfig-VulnerabilityAnalytics" "failed"
+    fi
+
+    return $RESULT
+}
+
 # =============================================================================
 # Monaco v2 Functions (Settings 2.0 with Platform Token)
 # =============================================================================
@@ -550,6 +578,7 @@ if [ $OVERALL_RESULT -eq 0 ]; then
     configureAutoTags || OVERALL_RESULT=1
     configureManagementZones || OVERALL_RESULT=1
     enableKubernetesAppExperience || OVERALL_RESULT=1
+    enableVulnerabilityAnalytics || OVERALL_RESULT=1
 
     # Step 3: Deploy Monaco Settings 2.0 configs
     echo ""
