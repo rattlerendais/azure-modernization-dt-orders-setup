@@ -45,6 +45,7 @@ Scripts for deploying, removing, and restarting workshop applications.
 | Script | Description |
 |--------|-------------|
 | `enable-easytrade-problems.sh` | Enable problem patterns in EasyTrade for demo purposes |
+| `upload-notebooks.sh` | Upload workshop notebooks to Dynatrace environment |
 
 ## Docker Compose Files
 
@@ -80,3 +81,16 @@ Kubernetes manifests used by the deploy scripts:
 | Manifest | Description |
 |----------|-------------|
 | `manifests/dynatrace-oneagent-metadata-viewer.yaml` | OneAgent metadata viewer pod |
+
+## Resources
+
+Workshop notebooks uploaded to Dynatrace via `upload-notebooks.sh`:
+
+| Notebook | Description |
+|----------|-------------|
+| `resources/AzureGrailWorkshop-Logs-Learning.json` | DQL Logs exercises (learning) |
+| `resources/AzureGrailWorkshop-Logs-Answers.json` | DQL Logs exercises (answers) |
+| `resources/AzureGrailWorkshop-Metrics-Learning.json` | DQL Metrics exercises (learning) |
+| `resources/AzureGrailWorkshop-Metrics-Answers.json` | DQL Metrics exercises (answers) |
+| `resources/AzureGrailWorkshop-BizEvents-Learning.json` | Business Events exercises (learning) |
+| `resources/AzureGrailWorkshop-BizEvents-Answers.json` | Business Events exercises (answers) |
