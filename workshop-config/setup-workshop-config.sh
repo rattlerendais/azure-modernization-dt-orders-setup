@@ -94,6 +94,8 @@ print_status() {
         echo "  [FAILED] $message"
     elif [ "$status" == "info" ]; then
         echo "  [..] $message"
+    elif [ "$status" == "skip" ] || [ "$status" == "warn" ]; then
+        echo "  [SKIP] $message"
     else
         echo "       $message"
     fi
@@ -384,13 +386,16 @@ download_monaco() {
 
 run_monaco() {
     local MONACO_PROJECT=$1
+    local SILENT=${2:-false}  # If true, suppress error output and events for expected failures
 
     # Monaco v2 uses manifest.yaml and environment variables for credentials
     # Export Platform Token and URL for Monaco
     export DT_BASEURL_PLATFORM=$DT_BASEURL_PLATFORM
     export DT_PLATFORM_TOKEN=$DT_PLATFORM_TOKEN
 
-    send_event "08-WorkshopConfig-Run-Monaco" "running" "$MONACO_PROJECT"
+    if [ "$SILENT" != "true" ]; then
+        send_event "08-WorkshopConfig-Run-Monaco" "running" "$MONACO_PROJECT"
+    fi
 
     if [ "$VERBOSE" = true ]; then
         ./monaco deploy $MONACO_V2_MANIFEST --project $MONACO_PROJECT
@@ -401,12 +406,16 @@ run_monaco() {
     fi
 
     if [ $DEPLOY_RESULT -eq 0 ]; then
-        send_event "08-WorkshopConfig-Run-Monaco" "success" "$MONACO_PROJECT"
+        if [ "$SILENT" != "true" ]; then
+            send_event "08-WorkshopConfig-Run-Monaco" "success" "$MONACO_PROJECT"
+        fi
     else
-        send_event "08-WorkshopConfig-Run-Monaco" "failed" "$MONACO_PROJECT"
-        if [ "$VERBOSE" = false ]; then
-            echo "       Error details (use --verbose for full output):"
-            grep -iE "error|failed" "$MONACO_LOG_FILE" 2>/dev/null | head -5 | sed 's/^/       /'
+        if [ "$SILENT" != "true" ]; then
+            send_event "08-WorkshopConfig-Run-Monaco" "failed" "$MONACO_PROJECT"
+            if [ "$VERBOSE" = false ]; then
+                echo "       Error details (use --verbose for full output):"
+                grep -iE "error|failed" "$MONACO_LOG_FILE" 2>/dev/null | head -5 | sed 's/^/       /'
+            fi
         fi
     fi
 
@@ -447,8 +456,12 @@ run_monaco_easytrade_configs() {
 
     # Deploy OneAgent features for bizevent capturing (must be first)
     # Note: This requires "devops admin" role - make it non-fatal if it fails
-    if ! run_monaco_with_retry easytrade-oneagent-features; then
-        echo "       (OneAgent features requires 'devops admin' role - continuing...)"
+    # Use silent mode to suppress error output for this expected failure
+    print_status "info" "Deploying Monaco project: easytrade-oneagent-features"
+    if run_monaco easytrade-oneagent-features true; then
+        print_status "ok" "Monaco project 'easytrade-oneagent-features' deployed"
+    else
+        print_status "skip" "OneAgent features skipped (requires 'devops admin' role)"
     fi
 
     # Deploy EasyTrade business events capturing rules
