@@ -265,26 +265,85 @@ enableVulnerabilityAnalytics() {
     echo ""
     echo "--- Enabling Vulnerability Analytics ---"
 
-    applySettings20 "vulnerability-analytics" '[{
-        "schemaId": "builtin:appsec.runtime-vulnerability-detection",
-        "scope": "environment",
-        "value": {
-            "enableRuntimeVulnerabilityDetection": true,
-            "globalMonitoringModeTPV": "MONITORING_ON",
-            "enableCodeLevelVulnerabilityDetection": true,
-            "globalMonitoringModeJava": "MONITORING_ON",
-            "globalMonitoringModeDotNet": "MONITORING_ON"
-        }
-    }]'
+    # First, get existing settings to see current state
+    print_status "info" "Checking existing vulnerability settings..."
+    local existing=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects?schemaIds=builtin:appsec.runtime-vulnerability-detection&scopes=environment" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+        -H "Content-Type: application/json")
 
-    local RESULT=$?
-    if [ $RESULT -eq 0 ]; then
-        send_event "07-WorkshopConfig-VulnerabilityAnalytics" "success"
+    local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
+
+    if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
+        # Settings exist - need to update with PUT
+        print_status "info" "Found existing settings (ID: $existing_id), updating..."
+
+        local update_payload='{
+            "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+            "scope": "environment",
+            "value": {
+                "enableRuntimeVulnerabilityDetection": true,
+                "globalMonitoringModeTPV": "MONITORING_ON",
+                "enableCodeLevelVulnerabilityDetection": true,
+                "globalMonitoringModeJava": "MONITORING_ON",
+                "globalMonitoringModeDotNet": "MONITORING_ON"
+            }
+        }'
+
+        local response=$(curl -s -X PUT \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$update_payload")
+
+        local http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$update_payload")
+
+        if [ "$http_code" == "200" ] || [ "$http_code" == "204" ]; then
+            print_status "ok" "Vulnerability Analytics updated"
+            send_event "07-WorkshopConfig-VulnerabilityAnalytics" "success"
+            return 0
+        else
+            print_status "fail" "Failed to update Vulnerability Analytics (HTTP $http_code)"
+            echo "       Response: $response"
+            send_event "07-WorkshopConfig-VulnerabilityAnalytics" "failed"
+            return 1
+        fi
     else
-        send_event "07-WorkshopConfig-VulnerabilityAnalytics" "failed"
-    fi
+        # No existing settings - create with POST
+        print_status "info" "No existing settings found, creating..."
 
-    return $RESULT
+        local response=$(curl -s -X POST \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '[{
+                "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+                "scope": "environment",
+                "value": {
+                    "enableRuntimeVulnerabilityDetection": true,
+                    "globalMonitoringModeTPV": "MONITORING_ON",
+                    "enableCodeLevelVulnerabilityDetection": true,
+                    "globalMonitoringModeJava": "MONITORING_ON",
+                    "globalMonitoringModeDotNet": "MONITORING_ON"
+                }
+            }]')
+
+        # Check if response indicates success
+        if echo "$response" | jq -e '.[0].objectId' > /dev/null 2>&1; then
+            print_status "ok" "Vulnerability Analytics enabled"
+            send_event "07-WorkshopConfig-VulnerabilityAnalytics" "success"
+            return 0
+        else
+            print_status "fail" "Failed to enable Vulnerability Analytics"
+            echo "       Response: $response"
+            send_event "07-WorkshopConfig-VulnerabilityAnalytics" "failed"
+            return 1
+        fi
+    fi
 }
 
 # =============================================================================
