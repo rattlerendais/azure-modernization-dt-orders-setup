@@ -1,0 +1,99 @@
+type: notebook
+name: "Azure Workshop - Log Analysis"
+content:
+  version: "6"
+  defaultTimeframe:
+    from: "now-2h"
+    to: "now"
+  sections:
+    - id: section-intro
+      type: markdown
+      state: {}
+      content: |
+        # Azure Workshop - Log Analysis
+
+        This notebook demonstrates log analysis capabilities in Dynatrace for your Azure AKS workloads.
+
+        ## Prerequisites
+        - EasyTrade application deployed on AKS
+        - Dynatrace Operator installed and configured
+        - Log ingest enabled in Dynatrace
+
+        ---
+
+    - id: section-all-logs
+      type: markdown
+      state: {}
+      content: |
+        ## All Kubernetes Logs
+
+        Let's start by fetching all logs from the cluster:
+
+    - id: query-all-logs
+      type: code
+      showTitle: true
+      title: "All Logs (Last 2 Hours)"
+      state: {}
+      input: |
+        fetch logs
+        | filter isNotNull(k8s.namespace.name)
+        | sort timestamp desc
+        | limit 100
+
+    - id: section-easytrade
+      type: markdown
+      state: {}
+      content: |
+        ## EasyTrade Application Logs
+
+        Filter logs specifically from the EasyTrade namespace:
+
+    - id: query-easytrade-logs
+      type: code
+      showTitle: true
+      title: "EasyTrade Logs"
+      state: {}
+      input: |
+        fetch logs
+        | filter k8s.namespace.name == "easytrade"
+        | sort timestamp desc
+        | limit 100
+
+    - id: section-errors
+      type: markdown
+      state: {}
+      content: |
+        ## Error Analysis
+
+        Find errors and warnings in your logs:
+
+    - id: query-errors
+      type: code
+      showTitle: true
+      title: "Errors and Warnings"
+      state: {}
+      input: |
+        fetch logs
+        | filter k8s.namespace.name == "easytrade"
+        | filter loglevel == "ERROR" or loglevel == "WARN"
+        | sort timestamp desc
+        | limit 100
+
+    - id: section-aggregations
+      type: markdown
+      state: {}
+      content: |
+        ## Log Aggregations
+
+        Analyze log patterns:
+
+    - id: query-log-counts
+      type: code
+      showTitle: true
+      title: "Logs by Service"
+      state: {}
+      input: |
+        fetch logs
+        | filter k8s.namespace.name == "easytrade"
+        | summarize count = count(), by: {k8s.container.name}
+        | sort count desc

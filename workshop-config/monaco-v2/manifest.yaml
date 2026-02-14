@@ -1,28 +1,19 @@
 manifestVersion: 1.0
 
 # =============================================================================
-# Monaco v2 Configuration for DT-Orders Workshop
+# Monaco v2 Configuration for Dynatrace Azure Workshop
 # =============================================================================
-# This manifest contains both Classic API and Settings 2.0 configurations.
+# Uses Platform Token for authentication (Settings 2.0 API only)
+#
+# Note: Classic API configs have been removed to enable single Platform Token:
+#   - k8/conditional-naming-processgroup (process group naming)
+#   - db (dashboard - use dtctl for new dashboards)
+#   - synthetics (synthetic monitors)
+#   - easytrade/custom-service-dotnet (custom service detection)
+#   - easytrade-application (RUM app - auto-detected by Dynatrace)
 # =============================================================================
 
 projects:
-  # Classic API: Conditional Naming for Process Groups
-  - name: k8
-    path: projects/k8
-
-  # Classic API: Dashboard
-  - name: db
-    path: projects/db
-
-  # Classic API: Synthetic Monitors
-  - name: synthetics
-    path: projects/synthetics
-
-  # Classic API: Custom Service (.NET) for EasyTrade
-  - name: easytrade
-    path: projects/easytrade
-
   # Settings 2.0: OneAgent Features for BizEvent Capturing
   - name: easytrade-oneagent-features
     path: projects/easytrade-oneagent-features
@@ -31,17 +22,13 @@ projects:
   - name: easytrade-bizevents
     path: projects/easytrade-bizevents
 
-  # Classic API + Settings 2.0: EasyTrade Web Application & Detection
-  - name: easytrade-application
-    path: projects/easytrade-application
-
 environmentGroups:
   - name: default
     environments:
       - name: workshop
         url:
           type: environment
-          value: DT_BASEURL
+          value: DT_BASEURL_PLATFORM
         auth:
-          token:
-            name: DT_API_TOKEN
+          platformToken:
+            name: DT_PLATFORM_TOKEN

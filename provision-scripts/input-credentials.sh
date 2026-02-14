@@ -2,6 +2,7 @@
 
 YLW='\033[1;33m'
 RED='\033[0;31m'
+GRN='\033[0;32m'
 NC='\033[0m'
 PROVISIONING_STEP="01-Input-credentials"
 
@@ -25,150 +26,235 @@ send_dt_event() {
     fi
 }
 
-
-
-if [ -f "$CREDS_FILE" ]
-then
-    DT_BASEURL=$(cat $CREDS_FILE | jq -r '.DT_BASEURL')
-    DT_API_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_API_TOKEN')
-    DT_PAAS_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_PAAS_TOKEN')
-    DT_ENVIRONMENT_ID=$(cat $CREDS_FILE | jq -r '.DT_ENVIRONMENT_ID')
-    AZURE_RESOURCE_GROUP=$(cat $CREDS_FILE | jq -r '.AZURE_RESOURCE_GROUP')
-    AZURE_SUBSCRIPTION=$(cat $CREDS_FILE | jq -r '.AZURE_SUBSCRIPTION')
-    AZURE_LOCATION=$(cat $CREDS_FILE | jq -r '.AZURE_LOCATION')
-    RESOURCE_PREFIX=$(cat $CREDS_FILE | jq -r '.RESOURCE_PREFIX')
+# Load existing credentials if available
+if [ -f "$CREDS_FILE" ]; then
+    DT_BASEURL=$(cat $CREDS_FILE | jq -r '.DT_BASEURL // empty')
+    DT_PLATFORM_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_PLATFORM_TOKEN // empty')
+    DT_ENVIRONMENT_ID=$(cat $CREDS_FILE | jq -r '.DT_ENVIRONMENT_ID // empty')
+    AZURE_RESOURCE_GROUP=$(cat $CREDS_FILE | jq -r '.AZURE_RESOURCE_GROUP // empty')
+    AZURE_SUBSCRIPTION=$(cat $CREDS_FILE | jq -r '.AZURE_SUBSCRIPTION // empty')
+    AZURE_LOCATION=$(cat $CREDS_FILE | jq -r '.AZURE_LOCATION // empty')
+    RESOURCE_PREFIX=$(cat $CREDS_FILE | jq -r '.RESOURCE_PREFIX // empty')
 fi
 
+# Get default Azure subscription if not set
 if [ -z "$AZURE_SUBSCRIPTION" ]; then
     AZURE_SUBSCRIPTION_ID=$(az account list --all --query "[?isDefault].id" --output tsv)
-    AZURE_SUBSCRIPTION_NAME=$(az account list --all --query "[?isDefault].name" --output tsv)
     AZURE_SUBSCRIPTION=$AZURE_SUBSCRIPTION_ID
 fi
 
+# Default location
+AZURE_LOCATION=${AZURE_LOCATION:-"eastus"}
+
 clear
 echo "==================================================================="
-echo -e "${YLW}Please enter your Dynatrace credentials as requested below: ${NC}"
-echo "Press <enter> to keep the current value"
+echo -e "${YLW}Dynatrace Azure Workshop - Credentials Setup${NC}"
 echo "==================================================================="
-#read -p "Your last name           (current: $RESOURCE_PREFIX) : " RESOURCE_PREFIX_NEW
-echo    "Dynatrace Base URL       (ex. https://ABC.apps.dynatrace.com) "
-read -p "                         (current: $DT_BASEURL) : " DT_BASEURL_NEW
-#read -p "Dynatrace PaaS Token    (current: $DT_PAAS_TOKEN) : " DT_PAAS_TOKEN_NEW
-echo    "Dynatrace Access API Token   (ex. dtco01.ABC1244213413213AADASDD) "  
-read -p "                         (current: $DT_ACCESS_API_TOKEN) : " DT_ACCESS_API_TOKEN_NEW
-read -p "Azure Subscription ID    (current: $AZURE_SUBSCRIPTION) : " AZURE_SUBSCRIPTION_NEW
+echo ""
+echo -e "${YLW}BEFORE YOU BEGIN:${NC}"
+echo "You need to create a Platform Token in Dynatrace with these scopes:"
+echo ""
+echo -e "${GRN}Required Platform Token Scopes (copy these):${NC}"
+echo "  settings:objects:read"
+echo "  settings:objects:write"
+echo "  settings:schemas:read"
+echo "  document:documents:read"
+echo "  document:documents:write"
+echo "  app-engine:apps:run"
+echo ""
+echo "To create the token:"
+echo "  1. Go to Dynatrace > Access Tokens"
+echo "  2. Click 'Generate new token'"
+echo "  3. Select 'Platform token'"
+echo "  4. Name it: 'azure-workshop'"
+echo "  5. Add the 6 scopes listed above"
+echo "  6. Click 'Generate token' and copy it"
+echo ""
+echo "==================================================================="
+echo -e "${YLW}Enter your credentials:${NC}"
+echo "Press <enter> to keep the current value"
 echo "==================================================================="
 echo ""
 
-# set value to new input or default to current value
+# Collect Dynatrace Base URL
+echo "Dynatrace Environment URL (ex. https://abc12345.apps.dynatrace.com)"
+read -p "                         (current: $DT_BASEURL) : " DT_BASEURL_NEW
+
+# Collect Platform Token
+echo ""
+echo "Dynatrace Platform Token (starts with dt0s16.)"
+read -p "                         (current: ${DT_PLATFORM_TOKEN:+****${DT_PLATFORM_TOKEN: -8}}) : " DT_PLATFORM_TOKEN_NEW
+
+# Collect Azure Subscription
+echo ""
+read -p "Azure Subscription ID    (current: $AZURE_SUBSCRIPTION) : " AZURE_SUBSCRIPTION_NEW
+
+echo ""
+echo "==================================================================="
+
+# Set values (new input or keep current)
 RESOURCE_PREFIX=${RESOURCE_PREFIX_NEW:-$RESOURCE_PREFIX}
 DT_BASEURL=${DT_BASEURL_NEW:-$DT_BASEURL}
-DT_ACCESS_API_TOKEN=${DT_ACCESS_API_TOKEN_NEW:-$DT_ACCESS_API_TOKEN}
-DT_API_TOKEN=${DT_API_TOKEN_NEW:-$DT_API_TOKEN}
-DT_PAAS_TOKEN=${DT_PAAS_TOKEN_NEW:-$DT_PAAS_TOKEN}
-AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP_NEW:-$AZURE_RESOURCE_GROUP}
+DT_PLATFORM_TOKEN=${DT_PLATFORM_TOKEN_NEW:-$DT_PLATFORM_TOKEN}
 AZURE_SUBSCRIPTION=${AZURE_SUBSCRIPTION_NEW:-$AZURE_SUBSCRIPTION}
-AZURE_LOCATION=${AZURE_LOCATION_NEW:-$AZURE_LOCATION}
-# append a prefix to resource group
-#AZURE_RESOURCE_GROUP="$RESOURCE_PREFIX-azure-modernize-workshop"
-#AZURE_AKS_CLUSTER_NAME="$RESOURCE_PREFIX-azure-modernize-cluster"
-#AZURE_RESOURCE_GROUP="$RESOURCE_PREFIX-dynatrace-azure-modernize"
-# Append RESOURCE_PREFIX if it exists to make resource names unique per user
+
+# Set resource names based on prefix
 if [ -n "$RESOURCE_PREFIX" ]; then
-  AZURE_RESOURCE_GROUP="dynatrace-azure-workshop-$RESOURCE_PREFIX"
-  AZURE_AKS_CLUSTER_NAME="dynatrace-azure-workshop-cluster-$RESOURCE_PREFIX"
-  AZURE_AIFOUNDRY_NAME="dynatrace-azure-workshop-aifoundry-$RESOURCE_PREFIX"
+    AZURE_RESOURCE_GROUP="dynatrace-azure-workshop-$RESOURCE_PREFIX"
+    AZURE_AKS_CLUSTER_NAME="dynatrace-azure-workshop-cluster-$RESOURCE_PREFIX"
+    AZURE_AIFOUNDRY_NAME="dynatrace-azure-workshop-aifoundry-$RESOURCE_PREFIX"
 else
-  AZURE_RESOURCE_GROUP="dynatrace-azure-workshop"
-  AZURE_AKS_CLUSTER_NAME="dynatrace-azure-workshop-cluster"
-  AZURE_AIFOUNDRY_NAME="dynatrace-azure-workshop-aifoundry"
+    AZURE_RESOURCE_GROUP="dynatrace-azure-workshop"
+    AZURE_AKS_CLUSTER_NAME="dynatrace-azure-workshop-cluster"
+    AZURE_AIFOUNDRY_NAME="dynatrace-azure-workshop-aifoundry"
 fi
-# Initialize AI Foundry endpoint and key as empty - will be populated later if resource exists
+
+# Initialize AI Foundry endpoint and key as empty
 AZURE_AIFOUNDRY_ENDPOINT=""
 AZURE_AIFOUNDRY_MODEL_KEY=""
-EMAIL=$(az account show --query user.name --output tsv)
+
+# Get user email from Azure
+EMAIL=$(az account show --query user.name --output tsv 2>/dev/null)
 EMAIL=$(echo $EMAIL | cut -d'#' -f 2)
 
-# Initialize generation flags
-DT_GEN2=false
-DT_GEN3=false
+# Extract DT_ENVIRONMENT_ID from the URL
+# Supports patterns:
+#   https://{env-id}.apps.dynatrace.com (Gen3/Platform)
+#   https://{env-id}.live.dynatrace.com (Gen2/Classic)
+#   https://{domain}/e/{env-id} (Managed)
+#   https://{env-id}.sprint.dynatracelabs.com (Sprint)
 
-# pull out the DT_ENVIRONMENT_ID. DT_BASEURL will be one of these patterns
 if [[ $(echo $DT_BASEURL | grep "/e/" | wc -l) == *"1"* ]]; then
-  #echo "Matched pattern: https://{your-domain}/e/{your-environment-id}"
-  DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"/e/" '{ print $2 }')
+    # Managed: https://{domain}/e/{env-id}
+    DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"/e/" '{ print $2 }')
 elif [[ $(echo $DT_BASEURL | grep ".live." | wc -l) == *"1"* ]]; then
-  #echo "Matched pattern: https://{your-environment-id}.live.dynatrace.com"
-  DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
-  DT_GEN2=true
+    # Gen2: https://{env-id}.live.dynatrace.com
+    DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
 elif [[ $(echo $DT_BASEURL | grep ".sprint." | wc -l) == *"1"* ]]; then
-  #echo "Matched pattern: https://{your-environment-id}.sprint.dynatracelabs.com"
-  DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
+    # Sprint: https://{env-id}.sprint.dynatracelabs.com
+    DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
 elif [[ $(echo $DT_BASEURL | grep ".apps." | wc -l) == *"1"* ]]; then
-  DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
-  DT_GEN3=true
+    # Gen3/Platform: https://{env-id}.apps.dynatrace.com
+    DT_ENVIRONMENT_ID=$(echo $DT_BASEURL | awk -F"." '{ print $1 }' | awk -F"https://" '{ print $2 }')
 else
-  echo "ERROR: No DT_ENVIRONMENT_ID pattern match to $DT_BASEURL"
-  exit 1
+    echo ""
+    echo -e "${RED}ERROR: Could not extract Environment ID from URL: $DT_BASEURL${NC}"
+    echo "Expected format: https://{env-id}.apps.dynatrace.com"
+    exit 1
 fi
 
-# Always set the live URL (used for API calls)
-DT_BASEURL_LIVE="https://$DT_ENVIRONMENT_ID.live.dynatrace.com"
-
-# Set generation-specific URLs
-if $DT_GEN2 ; then
-   DT_BASEURL_GEN2="$DT_BASEURL_LIVE"
-fi
-if $DT_GEN3 ; then
-   DT_BASEURL_GEN3="https://$DT_ENVIRONMENT_ID.apps.dynatrace.com"
-   # For Gen3, also set Gen2 URL for API compatibility
-   DT_BASEURL_GEN2="$DT_BASEURL_LIVE"
-fi
-
-# Fallback for managed/sprint environments
-if [ -z "$DT_BASEURL_GEN2" ]; then
-   DT_BASEURL_GEN2="$DT_BASEURL_LIVE"
-fi
-
-#remove trailing / if the have it
+# Remove trailing slash if present
 if [ "${DT_BASEURL: -1}" == "/" ]; then
-  #echo "removing / from DT_BASEURL"
-  DT_BASEURL="$(echo ${DT_BASEURL%?})"
+    DT_BASEURL="$(echo ${DT_BASEURL%?})"
 fi
 
-# Create workshop API token with required scopes
-echo "Creating Dynatrace workshop API token..."
-DT_TOKEN=$(curl --silent -X POST "https://$DT_ENVIRONMENT_ID.live.dynatrace.com/api/v2/apiTokens" -H "accept: application/json; charset=utf-8" -H "Content-Type: application/json; charset=utf-8" -d "{\"scopes\":[\"slo.read\",\"slo.write\",\"settings.read\",\"events.read\",\"events.ingest\",\"settings.write\",\"ReadConfig\",\"WriteConfig\",\"activeGateTokenManagement.create\",\"metrics.ingest\",\"logs.ingest\",\"entities.read\",\"DataExport\",\"openTelemetryTrace.ingest\",\"InstallerDownload\",\"SupportAlert\",\"securityProblems.write\",\"securityProblems.read\"],\"name\":\"azure-workshop-auto\"}" -H "Authorization: Api-Token $DT_ACCESS_API_TOKEN")
+# Set both Gen2 (live) and Gen3 (platform) URLs
+DT_BASEURL_LIVE="https://$DT_ENVIRONMENT_ID.live.dynatrace.com"
+DT_BASEURL_PLATFORM="https://$DT_ENVIRONMENT_ID.apps.dynatrace.com"
 
-DT_WORKSHOP_TOKEN=$(echo $DT_TOKEN | jq -r '.token // empty')
-
-# Check if token creation was successful
-if [ -z "$DT_WORKSHOP_TOKEN" ] || [ "$DT_WORKSHOP_TOKEN" == "null" ]; then
+# Validate Platform Token format
+if [[ ! "$DT_PLATFORM_TOKEN" =~ ^dt0s ]]; then
     echo ""
-    echo -e "${RED}WARNING: Failed to create Dynatrace API token.${NC}"
-    ERROR_MSG=$(echo $DT_TOKEN | jq -r '.error.message // .message // "Unknown error"')
-    echo "Error response: $ERROR_MSG"
+    echo -e "${RED}WARNING: Platform Token doesn't start with 'dt0s'.${NC}"
+    echo "Make sure you created a Platform Token (not a classic API token)."
     echo ""
-    echo "Please verify:"
-    echo "  1. Your Access API Token has 'apiTokens.write' scope"
-    echo "  2. The Dynatrace Base URL is correct"
-    echo "  3. Your Access API Token is valid and not expired"
-    echo ""
-
-    # Send failure event to DT
-    send_dt_event "01-Input-credentials-TOKEN-FAILED" ',"status":"Token creation failed","error":"'"$ERROR_MSG"'"'
-
     read -p "Do you want to continue anyway? (y/n) : " CONTINUE_REPLY
     if [ "$CONTINUE_REPLY" != "y" ]; then
-        echo "Exiting. Please fix the token and try again."
+        echo "Exiting. Please create a Platform Token and try again."
         exit 1
     fi
-    DT_WORKSHOP_TOKEN="TOKEN_CREATION_FAILED"
-else
-    # Send success event for token creation
-    send_dt_event "01-Input-credentials-TOKEN-SUCCESS" ',"status":"Token created successfully"'
 fi
 
+# Verify token works by making a simple API call
+echo ""
+echo "Verifying Platform Token..."
+VERIFY_RESULT=$(curl -s -o /dev/null -w "%{http_code}" \
+    "${DT_BASEURL_PLATFORM}/platform/metadata/v1/tenants" \
+    -H "Authorization: Bearer $DT_PLATFORM_TOKEN" 2>/dev/null)
+
+if [ "$VERIFY_RESULT" == "200" ]; then
+    echo -e "${GRN}Platform Token verified successfully!${NC}"
+    send_dt_event "01-Input-credentials-TOKEN-VERIFIED" ',"status":"Platform token verified"'
+else
+    echo -e "${RED}WARNING: Could not verify Platform Token (HTTP $VERIFY_RESULT)${NC}"
+    echo "The token may be invalid or missing required scopes."
+    echo ""
+    read -p "Do you want to continue anyway? (y/n) : " CONTINUE_REPLY
+    if [ "$CONTINUE_REPLY" != "y" ]; then
+        echo "Exiting. Please verify your Platform Token and try again."
+        exit 1
+    fi
+    send_dt_event "01-Input-credentials-TOKEN-FAILED" ',"status":"Platform token verification failed","http_code":"'"$VERIFY_RESULT"'"'
+fi
+
+# Display summary for confirmation
+echo ""
+echo "==================================================================="
+echo -e "${YLW}Please confirm all values are correct:${NC}"
+echo "==================================================================="
+echo ""
+echo "Dynatrace Settings:"
+echo "  Environment ID     : $DT_ENVIRONMENT_ID"
+echo "  Platform URL (Gen3): $DT_BASEURL_PLATFORM"
+echo "  Live URL (Gen2)    : $DT_BASEURL_LIVE"
+echo "  Platform Token     : ****${DT_PLATFORM_TOKEN: -8}"
+echo ""
+echo "Azure Settings:"
+echo "  Subscription ID    : $AZURE_SUBSCRIPTION"
+echo "  Resource Group     : $AZURE_RESOURCE_GROUP"
+echo "  AKS Cluster Name   : $AZURE_AKS_CLUSTER_NAME"
+echo "  Location           : $AZURE_LOCATION"
+echo ""
+echo "==================================================================="
+read -p "Is this all correct? (y/n) : " REPLY
+if [ "$REPLY" != "y" ]; then
+    echo "Exiting. Run this script again to re-enter credentials."
+    exit 0
+fi
+
+echo ""
+echo "==================================================================="
+
+# Backup existing credentials file
+cp $CREDS_FILE $CREDS_FILE.bak 2>/dev/null
+rm $CREDS_FILE 2>/dev/null
+
+# Create credentials file from template
+cat $CREDS_TEMPLATE_FILE | \
+    sed 's~RESOURCE_PREFIX_PLACEHOLDER~'"$RESOURCE_PREFIX"'~' | \
+    sed 's~DT_ENVIRONMENT_ID_PLACEHOLDER~'"$DT_ENVIRONMENT_ID"'~' | \
+    sed 's~DT_BASEURL_PLACEHOLDER~'"$DT_BASEURL_LIVE"'~' | \
+    sed 's~DT_BASEURL_LIVE_PLACEHOLDER~'"$DT_BASEURL_LIVE"'~' | \
+    sed 's~DT_BASEURL_PLATFORM_PLACEHOLDER~'"$DT_BASEURL_PLATFORM"'~' | \
+    sed 's~DT_PLATFORM_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
+    sed 's~DT_API_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
+    sed 's~DT_PAAS_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
+    sed 's~DT_ACCESS_API_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
+    sed 's~AZURE_SUBSCRIPTION_PLACEHOLDER~'"$AZURE_SUBSCRIPTION"'~' | \
+    sed 's~AZURE_RESOURCE_GROUP_PLACEHOLDER~'"$AZURE_RESOURCE_GROUP"'~' | \
+    sed 's~AZURE_LOCATION_PLACEHOLDER~'"$AZURE_LOCATION"'~' | \
+    sed 's~AZURE_AKS_CLUSTER_NAME_PLACEHOLDER~'"$AZURE_AKS_CLUSTER_NAME"'~' | \
+    sed 's~AZURE_AIFOUNDRY_NAME_PLACEHOLDER~'"$AZURE_AIFOUNDRY_NAME"'~' | \
+    sed 's~DT_DASHBOARD_OWNER_EMAIL_PLACEHOLDER~'"$EMAIL"'~' | \
+    sed 's~EMAIL_PLACEHOLDER~'"$EMAIL"'~' | \
+    sed 's~AZURE_AIFOUNDRY_ENDPOINT_PLACEHOLDER~'"$AZURE_AIFOUNDRY_ENDPOINT"'~' | \
+    sed 's~AZURE_AIFOUNDRY_MODEL_KEY_PLACEHOLDER~'"$AZURE_AIFOUNDRY_MODEL_KEY"'~' > $CREDS_FILE
+
+echo -e "${GRN}Credentials saved to: $CREDS_FILE${NC}"
+
+# Send credentials saved event
+send_dt_event "01-Input-credentials-SAVED" ',"status":"Credentials saved successfully"'
+
+echo ""
+echo "========================================================================================================"
+echo -e "${YLW}***** IMPORTANT: Save these values for Lab 3 (Dynatrace Operator Installation) *****${NC}"
+echo "--------------------------------------------------------------------------------------------------------"
+echo "Dynatrace Operator Token : $DT_PLATFORM_TOKEN"
+echo "Dynatrace API URL        : ${DT_BASEURL_LIVE}/api"
+echo "========================================================================================================"
+echo ""
+
+# Send final completion event
 JSON_EVENT=$(cat <<EOF
 {
   "id": "1",
@@ -182,67 +268,6 @@ JSON_EVENT=$(cat <<EOF
 EOF
 )
 
-echo -e "Please confirm all are correct:"
-echo "--------------------------------------------------"
-#echo "Your last name                 : $RESOURCE_PREFIX"
-echo "Dynatrace Base URL             : $DT_BASEURL"
-#echo "Dynatrace PaaS Token          : $DT_PAAS_TOKEN"
-echo "Dynatrace Access API Token     : $DT_ACCESS_API_TOKEN"
-echo "Azure Subscription ID          : $AZURE_SUBSCRIPTION"
-echo "--------------------------------------------------"
-echo "derived values"
-echo "--------------------------------------------------"
-echo "Azure Resource Group     : $AZURE_RESOURCE_GROUP"
-echo "Azure AKS Cluster Name       : $AZURE_AKS_CLUSTER_NAME"
-echo "Dynatrace Environment ID : $DT_ENVIRONMENT_ID"
-#echo "Dynatrace Gen2 BaseURL   : https://$DT_ENVIRONMENT_ID.live.dynatrace.com"
-#echo "DT Workshop API Token    : $DT_WORKSHOP_TOKEN"
-#echo "Your email               : $EMAIL"
-echo "==================================================================="
-read -p "Is this all correct? (y/n) : " REPLY;
-if [ "$REPLY" != "y" ]; then exit 0; fi
-echo ""
-echo "==================================================================="
-# make a backup
-cp $CREDS_FILE $CREDS_FILE.bak 2> /dev/null
-rm $CREDS_FILE 2> /dev/null
-
-# create new file from the template
-cat $CREDS_TEMPLATE_FILE | \
-  sed 's~RESOURCE_PREFIX_PLACEHOLDER~'"$RESOURCE_PREFIX"'~' | \
-  sed 's~AZURE_RESOURCE_GROUP_PLACEHOLDER~'"$AZURE_RESOURCE_GROUP"'~' | \
-  sed 's~AZURE_AKS_CLUSTER_NAME_PLACEHOLDER~'"$AZURE_AKS_CLUSTER_NAME"'~' | \
-  sed 's~AZURE_AIFOUNDRY_NAME_PLACEHOLDER~'"$AZURE_AIFOUNDRY_NAME"'~' | \
-  sed 's~AZURE_SUBSCRIPTION_PLACEHOLDER~'"$AZURE_SUBSCRIPTION"'~' | \
-  sed 's~AZURE_LOCATION_PLACEHOLDER~'"$AZURE_LOCATION"'~' | \
-  sed 's~DT_ENVIRONMENT_ID_PLACEHOLDER~'"$DT_ENVIRONMENT_ID"'~' | \
-  sed 's~DT_BASEURL_PLACEHOLDER~'"$DT_BASEURL_GEN2"'~' | \
-  sed 's~DT_API_TOKEN_PLACEHOLDER~'"$DT_WORKSHOP_TOKEN"'~' | \
-  sed 's~DT_DASHBOARD_OWNER_EMAIL_PLACEHOLDER~'"$EMAIL"'~' | \
-  sed 's~EMAIL_PLACEHOLDER~'"$EMAIL"'~' | \
-  sed 's~DT_ACCESS_API_TOKEN_PLACEHOLDER~'"$DT_ACCESS_API_TOKEN"'~' | \
-  sed 's~DT_PAAS_TOKEN_PLACEHOLDER~'"$DT_WORKSHOP_TOKEN"'~' | \
-  sed 's~AZURE_AIFOUNDRY_ENDPOINT_PLACEHOLDER~'"$AZURE_AIFOUNDRY_ENDPOINT"'~' | \
-  sed 's~AZURE_AIFOUNDRY_MODEL_KEY_PLACEHOLDER~'"$AZURE_AIFOUNDRY_MODEL_KEY"'~' > $CREDS_FILE
-
-echo "Saved credential to: $CREDS_FILE"
-
-# Send credentials saved event
-send_dt_event "01-Input-credentials-SAVED" ',"status":"Credentials saved successfully"'
-
-echo " "
-echo " "
-echo "========================================================================================================"
-echo -e "${YLW}***** Please save the values below in a notepad for Lab3 when we install the Dynatrace Operator on AKS Cluster ***** ${NC}"
-echo "--------------------------------------------------------------------------------------"
-echo "Dynatrace Operator & Data Ingest Token 	:	$DT_WORKSHOP_TOKEN"
-echo "API URL for Dynatrace Tenant	     	:	https://$DT_ENVIRONMENT_ID.live.dynatrace.com/api"
-echo "========================================================================================================="
-
-# Send final completion event (using legacy format for backwards compatibility)
-DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
-     -H "Content-Type: application/json" \
-     -d "$JSON_EVENT")
-
-#cat $CREDS_FILE
-
+curl -s -X POST "$DT_EVENT_ENDPOINT" \
+    -H "Content-Type: application/json" \
+    -d "$JSON_EVENT" > /dev/null 2>&1

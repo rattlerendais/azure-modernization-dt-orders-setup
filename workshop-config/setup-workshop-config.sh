@@ -1,15 +1,20 @@
 #!/bin/bash
 
 # =============================================================================
-# Workshop Configuration Script - Monaco + Direct API
+# Workshop Configuration Script - Monaco + dtctl (Platform Token)
 # =============================================================================
 # This script uses:
-#   - Monaco v2 for Classic API configs (custom-services, conditional-naming, dashboard, synthetics)
-#   - Direct Settings 2.0 API calls for settings configurations
+#   - Monaco v2 with Platform Token for Settings 2.0 configs
+#   - dtctl for notebooks and platform resources
+#   - Direct Settings 2.0 API calls for additional configurations
 #
-# Usage: ./setup-workshop-config.sh [setup-type] [options]
-#   setup-type: synthetics, dashboard, or blank for full workshop config
+# All authentication uses a single Platform Token with scopes:
+#   settings:objects:read, settings:objects:write, settings:schemas:read
+#   document:documents:read, document:documents:write, app-engine:apps:run
+#
+# Usage: ./setup-workshop-config.sh [options]
 #   options: --verbose for detailed output
+#            --skip-notebooks to skip notebook upload
 # =============================================================================
 
 # Change to script directory to ensure relative paths work
@@ -18,27 +23,23 @@ cd "$(dirname "$0")"
 source ./_workshop-config.lib
 
 # Parse arguments
-SETUP_TYPE=""
-DASHBOARD_OWNER_EMAIL=""
 VERBOSE=false
+SKIP_NOTEBOOKS=false
 
 for arg in "$@"; do
     case $arg in
         --verbose|-v)
             VERBOSE=true
             ;;
-        *)
-            if [ -z "$SETUP_TYPE" ]; then
-                SETUP_TYPE=$arg
-            elif [ -z "$DASHBOARD_OWNER_EMAIL" ]; then
-                DASHBOARD_OWNER_EMAIL=$arg
-            fi
+        --skip-notebooks)
+            SKIP_NOTEBOOKS=true
             ;;
     esac
 done
 
 # Tool versions
 MONACO_V2_VERSION="2.28.1"
+DTCTL_VERSION="0.10.0"
 
 # Configuration paths
 MONACO_V2_MANIFEST=./monaco-v2/manifest.yaml
@@ -68,8 +69,7 @@ send_event() {
   "event.category": "azure-workshop",
   "user": "$EMAIL",
   "event.type": "provisioning-step",
-  "DT_ENVIRONMENT_ID": "$DT_ENVIRONMENT_ID",
-  "setup_type": "$SETUP_TYPE"
+  "DT_ENVIRONMENT_ID": "$DT_ENVIRONMENT_ID"
 }
 EOF
 )
@@ -94,18 +94,20 @@ print_status() {
 }
 
 # =============================================================================
-# Settings 2.0 API Functions
+# Settings 2.0 API Functions (using Platform Token)
 # =============================================================================
 
-# Apply a Settings 2.0 configuration
+# Apply a Settings 2.0 configuration using Platform Token
 applySettings20() {
     local config_name="$1"
     local json_payload="$2"
 
     print_status "info" "Applying Settings 2.0: $config_name"
 
+    # Use Platform Token with Bearer auth against platform URL
     local response=$(curl -s -X POST \
-        "$DT_BASEURL/api/v2/settings/objects?Api-Token=$DT_API_TOKEN" \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
         -H 'Content-Type: application/json' \
         -H 'cache-control: no-cache' \
         -d "$json_payload")
@@ -258,7 +260,7 @@ enableKubernetesAppExperience() {
 }
 
 # =============================================================================
-# Monaco v2 Functions (Classic API only)
+# Monaco v2 Functions (Settings 2.0 with Platform Token)
 # =============================================================================
 
 download_monaco() {
@@ -283,41 +285,39 @@ download_monaco() {
                 MONACO_BINARY="monaco-linux-amd64"
             fi
             ;;
+        mingw*|msys*|cygwin*)
+            MONACO_BINARY="monaco-windows-amd64.exe"
+            ;;
         *)
             MONACO_BINARY="monaco-linux-amd64"
             ;;
     esac
 
     print_status "info" "Downloading Monaco v$MONACO_V2_VERSION ($MONACO_BINARY)..."
-    rm -f monaco
+    rm -f monaco monaco.exe
 
-    wget -q -O monaco "https://github.com/Dynatrace/dynatrace-configuration-as-code/releases/download/v${MONACO_V2_VERSION}/${MONACO_BINARY}" 2>/dev/null
-    chmod +x monaco
-
-    if [ -f monaco ] && [ -x monaco ]; then
-        print_status "ok" "Monaco v$MONACO_V2_VERSION installed"
-        send_event "06-WorkshopConfig-Download-Monaco" "success"
-    else
-        print_status "fail" "Failed to download Monaco"
-        send_event "06-WorkshopConfig-Download-Monaco" "failed"
-        return 1
+    if wget -q -O monaco "https://github.com/Dynatrace/dynatrace-configuration-as-code/releases/download/v${MONACO_V2_VERSION}/${MONACO_BINARY}" 2>/dev/null || \
+       curl -sL -o monaco "https://github.com/Dynatrace/dynatrace-configuration-as-code/releases/download/v${MONACO_V2_VERSION}/${MONACO_BINARY}"; then
+        chmod +x monaco 2>/dev/null
+        if [ -f monaco ]; then
+            print_status "ok" "Monaco v$MONACO_V2_VERSION installed"
+            send_event "06-WorkshopConfig-Download-Monaco" "success"
+            return 0
+        fi
     fi
+
+    print_status "fail" "Failed to download Monaco"
+    send_event "06-WorkshopConfig-Download-Monaco" "failed"
+    return 1
 }
 
 run_monaco() {
     local MONACO_PROJECT=$1
-    local DASHBOARD_OWNER=$2
-
-    # Set OWNER env var for dashboard project
-    if [ -z "$DASHBOARD_OWNER" ]; then
-        export OWNER=DUMMY_PLACEHOLDER
-    else
-        export OWNER=$DASHBOARD_OWNER
-    fi
 
     # Monaco v2 uses manifest.yaml and environment variables for credentials
-    export DT_BASEURL=$DT_BASEURL
-    export DT_API_TOKEN=$DT_API_TOKEN
+    # Export Platform Token and URL for Monaco
+    export DT_BASEURL_PLATFORM=$DT_BASEURL_PLATFORM
+    export DT_PLATFORM_TOKEN=$DT_PLATFORM_TOKEN
 
     send_event "08-WorkshopConfig-Run-Monaco" "running" "$MONACO_PROJECT"
 
@@ -335,7 +335,7 @@ run_monaco() {
         send_event "08-WorkshopConfig-Run-Monaco" "failed" "$MONACO_PROJECT"
         if [ "$VERBOSE" = false ]; then
             echo "       Error details (use --verbose for full output):"
-            grep -E "level=ERROR" "$MONACO_LOG_FILE" | head -5 | sed 's/^/       /'
+            grep -iE "error|failed" "$MONACO_LOG_FILE" 2>/dev/null | head -5 | sed 's/^/       /'
         fi
     fi
 
@@ -344,14 +344,13 @@ run_monaco() {
 
 run_monaco_with_retry() {
     local MONACO_PROJECT=$1
-    local DASHBOARD_OWNER=$2
-    local MAX_RETRIES=${3:-2}
-    local RETRY_DELAY=${4:-10}
+    local MAX_RETRIES=${2:-2}
+    local RETRY_DELAY=${3:-10}
 
     print_status "info" "Deploying Monaco project: $MONACO_PROJECT"
 
     for ((i=1; i<=MAX_RETRIES; i++)); do
-        run_monaco "$MONACO_PROJECT" "$DASHBOARD_OWNER"
+        run_monaco "$MONACO_PROJECT"
         RESULT=$?
 
         if [ $RESULT -eq 0 ]; then
@@ -369,32 +368,14 @@ run_monaco_with_retry() {
     return 1
 }
 
-run_monaco_classic_configs() {
-    local RESULT=0
-
-    echo ""
-    echo "--- Monaco: Classic API Deployment ---"
-
-    # Deploy k8 conditional naming
-    run_monaco_with_retry k8 || RESULT=1
-
-    # Deploy EasyTrade custom service
-    run_monaco_with_retry easytrade || RESULT=1
-
-    return $RESULT
-}
-
 run_monaco_easytrade_configs() {
     local RESULT=0
 
     echo ""
-    echo "--- Monaco: EasyTrade Configuration ---"
+    echo "--- Monaco: EasyTrade Settings 2.0 Configuration ---"
 
     # Deploy OneAgent features for bizevent capturing (must be first)
     run_monaco_with_retry easytrade-oneagent-features || RESULT=1
-
-    # Deploy EasyTrade web application
-    run_monaco_with_retry easytrade-application || RESULT=1
 
     # Deploy EasyTrade business events capturing rules
     run_monaco_with_retry easytrade-bizevents || RESULT=1
@@ -403,23 +384,124 @@ run_monaco_easytrade_configs() {
 }
 
 # =============================================================================
-# Custom Dynatrace Config (Direct API)
+# dtctl Functions
 # =============================================================================
 
-run_custom_dynatrace_config() {
-    send_event "09-WorkshopConfig-Custom-Config" "running"
+download_dtctl() {
+    send_event "06-WorkshopConfig-Download-dtctl" "running"
 
+    # Determine OS and architecture
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+
+    case "$ARCH" in
+        x86_64|amd64) ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+    esac
+
+    case "$OS" in
+        darwin) OS="darwin" ;;
+        linux) OS="linux" ;;
+        mingw*|msys*|cygwin*) OS="windows" ;;
+    esac
+
+    local PLATFORM="${OS}_${ARCH}"
+    local EXT="tar.gz"
+    [ "$OS" == "windows" ] && EXT="zip"
+
+    local DOWNLOAD_URL="https://github.com/dynatrace-oss/dtctl/releases/download/v${DTCTL_VERSION}/dtctl_${DTCTL_VERSION}_${PLATFORM}.${EXT}"
+
+    print_status "info" "Downloading dtctl v$DTCTL_VERSION ($PLATFORM)..."
+    rm -f dtctl dtctl.exe
+
+    local TEMP_FILE="/tmp/dtctl_download.${EXT}"
+    if curl -sL -o "$TEMP_FILE" "$DOWNLOAD_URL"; then
+        if [ "$EXT" == "zip" ]; then
+            unzip -o -q "$TEMP_FILE" dtctl.exe -d . 2>/dev/null
+        else
+            tar -xzf "$TEMP_FILE" dtctl 2>/dev/null
+        fi
+        rm -f "$TEMP_FILE"
+
+        chmod +x dtctl 2>/dev/null
+
+        if [ -f dtctl ] || [ -f dtctl.exe ]; then
+            print_status "ok" "dtctl v$DTCTL_VERSION installed"
+            send_event "06-WorkshopConfig-Download-dtctl" "success"
+            return 0
+        fi
+    fi
+
+    print_status "fail" "Failed to download dtctl"
+    send_event "06-WorkshopConfig-Download-dtctl" "failed"
+    return 1
+}
+
+configure_dtctl() {
+    print_status "info" "Configuring dtctl context..."
+
+    local DTCTL="./dtctl"
+    [ -f "./dtctl.exe" ] && DTCTL="./dtctl.exe"
+
+    # Set context
+    $DTCTL config set-context workshop \
+        --environment "$DT_BASEURL_PLATFORM" \
+        --token-ref workshop-token \
+        --safety-level readwrite-all 2>/dev/null
+
+    # Set credentials
+    $DTCTL config set-credentials workshop-token \
+        --token "$DT_PLATFORM_TOKEN" 2>/dev/null
+
+    # Use the context
+    $DTCTL config use-context workshop 2>/dev/null
+
+    print_status "ok" "dtctl configured"
+}
+
+upload_notebooks() {
+    send_event "09-WorkshopConfig-Upload-Notebooks" "running"
     echo ""
-    echo "--- Custom Dynatrace Settings (Direct API) ---"
-    print_status "info" "Applying custom Dynatrace settings..."
+    echo "--- Uploading Workshop Notebooks ---"
 
-    setFrequentIssueDetectionOff > /dev/null 2>&1
-    setServiceAnomalyDetection ./custom/service-anomalydetection.json > /dev/null 2>&1
+    local DTCTL="./dtctl"
+    [ -f "./dtctl.exe" ] && DTCTL="./dtctl.exe"
 
-    print_status "ok" "Frequent issue detection disabled"
-    print_status "ok" "Service anomaly detection configured"
+    local NOTEBOOKS_DIR="./notebooks"
+    local RESULT=0
 
-    send_event "09-WorkshopConfig-Custom-Config" "success"
+    if [ ! -d "$NOTEBOOKS_DIR" ]; then
+        print_status "info" "No notebooks directory found, skipping"
+        return 0
+    fi
+
+    local NOTEBOOK_COUNT=$(find "$NOTEBOOKS_DIR" -name "*.yaml" -o -name "*.yml" 2>/dev/null | wc -l)
+    if [ "$NOTEBOOK_COUNT" -eq 0 ]; then
+        print_status "info" "No notebooks found to upload"
+        return 0
+    fi
+
+    for notebook in "$NOTEBOOKS_DIR"/*.yaml "$NOTEBOOKS_DIR"/*.yml; do
+        [ -e "$notebook" ] || continue
+
+        local NOTEBOOK_NAME=$(basename "$notebook")
+        print_status "info" "Uploading: $NOTEBOOK_NAME"
+
+        if $DTCTL apply -f "$notebook" 2>/dev/null; then
+            print_status "ok" "$NOTEBOOK_NAME"
+        else
+            print_status "fail" "$NOTEBOOK_NAME"
+            ((RESULT++))
+        fi
+    done
+
+    if [ $RESULT -eq 0 ]; then
+        send_event "09-WorkshopConfig-Upload-Notebooks" "success"
+    else
+        send_event "09-WorkshopConfig-Upload-Notebooks" "failed"
+    fi
+
+    return $RESULT
 }
 
 # =============================================================================
@@ -433,71 +515,57 @@ echo ""
 echo "==========================================================================="
 echo " Dynatrace Workshop Configuration"
 echo "==========================================================================="
-echo " Environment : $DT_BASEURL"
-echo " Setup Type  : ${SETUP_TYPE:-full workshop}"
-echo " Tools       : Monaco v$MONACO_V2_VERSION + Settings 2.0 API"
+echo " Environment : $DT_BASEURL_PLATFORM"
+echo " Auth        : Platform Token"
+echo " Tools       : Monaco v$MONACO_V2_VERSION + dtctl v$DTCTL_VERSION"
 echo " Started     : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "==========================================================================="
 echo ""
 
+# Verify Platform Token is available
+if [ -z "$DT_PLATFORM_TOKEN" ]; then
+    echo "ERROR: DT_PLATFORM_TOKEN is not set"
+    echo "Make sure workshop-credentials.json contains a valid Platform Token"
+    exit 1
+fi
+
 OVERALL_RESULT=0
 
-case "$SETUP_TYPE" in
-    "synthetics")
-        echo "Configuring Synthetic monitors only..."
-        if download_monaco; then
-            run_monaco synthetics || OVERALL_RESULT=1
-        else
-            OVERALL_RESULT=1
-        fi
-        ;;
-    "dashboard")
-        if [ -z "$DASHBOARD_OWNER_EMAIL" ]; then
-            echo "ERROR: Dashboard owner email is required"
-            echo "Usage: ./setup-workshop-config.sh dashboard name@company.com"
-            exit 1
-        fi
-        echo "Configuring Dashboard for $DASHBOARD_OWNER_EMAIL..."
-        if download_monaco; then
-            run_monaco db "$DASHBOARD_OWNER_EMAIL" || OVERALL_RESULT=1
-        else
-            OVERALL_RESULT=1
-        fi
-        ;;
-    *)
-        # Full workshop configuration
-        echo "Configuring full workshop..."
+# Full workshop configuration
+echo "Configuring full workshop..."
+echo ""
+
+# Step 1: Download Tools
+echo "=== Step 1: Downloading Tools ==="
+download_monaco || OVERALL_RESULT=1
+download_dtctl || OVERALL_RESULT=1
+
+if [ $OVERALL_RESULT -eq 0 ]; then
+    # Configure dtctl
+    configure_dtctl
+
+    # Step 2: Configure Settings 2.0 via API
+    echo ""
+    echo "=== Step 2: Settings 2.0 Configuration (API) ==="
+    configureAutoTags || OVERALL_RESULT=1
+    configureManagementZones || OVERALL_RESULT=1
+    enableKubernetesAppExperience || OVERALL_RESULT=1
+
+    # Step 3: Deploy Monaco Settings 2.0 configs
+    echo ""
+    echo "=== Step 3: Monaco Deployment (Settings 2.0) ==="
+    run_monaco_easytrade_configs || OVERALL_RESULT=1
+
+    # Step 4: Upload Notebooks (optional)
+    if [ "$SKIP_NOTEBOOKS" = false ]; then
         echo ""
-
-        # Step 1: Download Monaco
-        echo "=== Step 1: Downloading Tools ==="
-        download_monaco || OVERALL_RESULT=1
-
-        if [ $OVERALL_RESULT -eq 0 ]; then
-            # Step 2: Configure Settings 2.0 via API
-            echo ""
-            echo "=== Step 2: Settings 2.0 Configuration (API) ==="
-            configureAutoTags || OVERALL_RESULT=1
-            configureManagementZones || OVERALL_RESULT=1
-            enableKubernetesAppExperience || OVERALL_RESULT=1
-
-            # Step 3: Deploy Monaco Classic API configs
-            echo ""
-            echo "=== Step 3: Monaco Deployment (Classic API) ==="
-            run_monaco_classic_configs || OVERALL_RESULT=1
-
-            # Step 4: Deploy EasyTrade BizEvents & Application configs
-            echo ""
-            echo "=== Step 4: EasyTrade BizEvents & Application ==="
-            run_monaco_easytrade_configs || OVERALL_RESULT=1
-
-            # Step 5: Apply custom Dynatrace settings
-            echo ""
-            echo "=== Step 5: Custom Dynatrace Settings ==="
-            run_custom_dynatrace_config
-        fi
-        ;;
-esac
+        echo "=== Step 4: Upload Notebooks (dtctl) ==="
+        upload_notebooks || OVERALL_RESULT=1
+    else
+        echo ""
+        echo "=== Step 4: Upload Notebooks (SKIPPED) ==="
+    fi
+fi
 
 echo ""
 echo "==========================================================================="
@@ -510,6 +578,9 @@ else
 fi
 echo " Finished    : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "==========================================================================="
+echo ""
+echo "View notebooks: $DT_BASEURL_PLATFORM/ui/document/list?filter-documentType=notebook"
+echo ""
 
 # Cleanup temp files
 rm -f "$MONACO_LOG_FILE" 2>/dev/null
