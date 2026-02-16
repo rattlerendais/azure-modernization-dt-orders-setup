@@ -43,30 +43,59 @@ print_status() {
     fi
 }
 
-# Delete settings object by schema and name
-delete_settings_by_name() {
-    local schema="$1"
-    local name="$2"
+# Delete auto-tag by name (Config API v1)
+delete_autotag() {
+    local name="$1"
 
-    print_status "info" "Deleting $schema: $name"
+    print_status "info" "Deleting auto-tag: $name"
 
-    # Find the object ID by name
+    # List all auto-tags and find ID by name
     local response=$(curl -s \
-        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects?schemaIds=$schema&scopes=environment&fields=objectId,value" \
-        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
-        -H "Content-Type: application/json")
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/api/config/v1/autoTags" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
 
-    # Extract object ID where value.name matches
-    local object_id=$(echo "$response" | jq -r --arg name "$name" '.items[] | select(.value.name == $name) | .objectId' 2>/dev/null)
+    local tag_id=$(echo "$response" | jq -r --arg name "$name" '.values[] | select(.name == $name) | .id' 2>/dev/null)
 
-    if [ -z "$object_id" ] || [ "$object_id" == "null" ]; then
+    if [ -z "$tag_id" ] || [ "$tag_id" == "null" ]; then
         print_status "skip" "$name (not found)"
         return 0
     fi
 
-    # Delete the object
+    # Delete the auto-tag
     local delete_response=$(curl -s -o /dev/null -w "%{http_code}" \
-        -X DELETE "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$object_id" \
+        -X DELETE "$DT_BASEURL_PLATFORM/platform/classic/environment-api/api/config/v1/autoTags/$tag_id" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
+
+    if [ "$delete_response" == "204" ] || [ "$delete_response" == "200" ]; then
+        print_status "ok" "$name"
+        return 0
+    else
+        print_status "fail" "$name (HTTP $delete_response)"
+        return 1
+    fi
+}
+
+# Delete management zone by name (Config API v1)
+delete_management_zone() {
+    local name="$1"
+
+    print_status "info" "Deleting management zone: $name"
+
+    # List all management zones and find ID by name
+    local response=$(curl -s \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/api/config/v1/managementZones" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
+
+    local mz_id=$(echo "$response" | jq -r --arg name "$name" '.values[] | select(.name == $name) | .id' 2>/dev/null)
+
+    if [ -z "$mz_id" ] || [ "$mz_id" == "null" ]; then
+        print_status "skip" "$name (not found)"
+        return 0
+    fi
+
+    # Delete the management zone
+    local delete_response=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X DELETE "$DT_BASEURL_PLATFORM/platform/classic/environment-api/api/config/v1/managementZones/$mz_id" \
         -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
 
     if [ "$delete_response" == "204" ] || [ "$delete_response" == "200" ]; then
@@ -208,22 +237,22 @@ fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Delete Auto-Tags
+# Delete Auto-Tags (Config API v1)
 # -----------------------------------------------------------------------------
 echo "--- Deleting Auto-Tags ---"
-delete_settings_by_name "builtin:tags.auto-tagging" "project"
-delete_settings_by_name "builtin:tags.auto-tagging" "service"
-delete_settings_by_name "builtin:tags.auto-tagging" "stage"
+delete_autotag "project"
+delete_autotag "service"
+delete_autotag "stage"
 echo ""
 
 # -----------------------------------------------------------------------------
-# Delete Management Zones
+# Delete Management Zones (Config API v1)
 # -----------------------------------------------------------------------------
 echo "--- Deleting Management Zones ---"
-delete_settings_by_name "builtin:management-zones" "dt-orders-monolith"
-delete_settings_by_name "builtin:management-zones" "dt-orders-k8"
-delete_settings_by_name "builtin:management-zones" "dt-orders-services"
-delete_settings_by_name "builtin:management-zones" "EasyTrade"
+delete_management_zone "dt-orders-monolith"
+delete_management_zone "dt-orders-k8"
+delete_management_zone "dt-orders-services"
+delete_management_zone "EasyTrade"
 echo ""
 
 # -----------------------------------------------------------------------------
