@@ -521,6 +521,20 @@ create_virtual_machine() {
             --output none
         print_success "Port 80 opened."
 
+        # Remove default SSH access for security
+        echo "Removing default SSH access..."
+        az network nsg rule delete \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --nsg-name "${VM_NAME}-nsg" \
+            --name "default-allow-ssh" \
+            --subscription "$AZURE_SUBSCRIPTION" \
+            --output none 2>/dev/null
+        if [ $? -eq 0 ]; then
+            print_success "SSH access removed (use enable-ssh.sh to re-enable)."
+        else
+            print_warning "Could not remove SSH rule (may not exist or different name)."
+        fi
+
         # Send event
         send_dt_event "03-Provision-VM" ',"vmState":"VM running"'
     else
