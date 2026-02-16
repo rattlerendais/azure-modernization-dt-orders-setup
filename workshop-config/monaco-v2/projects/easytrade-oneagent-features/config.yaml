@@ -1,44 +1,48 @@
 configs:
-  # Enable HTTP request capturing for .NET services
+  # Enable HTTP bizevent capturing for .NET services
   - id: http-dotnet
     config:
-      name: HTTP request capturing for .NET
-      template: http-dotnet.json
+      template: &template oneagent-feature.json
       skip: false
-    type:
+      parameters:
+        featureKey: SENSOR_DOTNET_BIZEVENTS_HTTP_INCOMING
+    type: &type
       settings:
         schema: builtin:oneagent.features
         scope: environment
 
-  # Enable HTTP request capturing for Java services
-  - id: http-java
+  # Enable HTTP bizevent capturing for webserver (nginx)
+  - id: http-webserver
     config:
-      name: HTTP request capturing for Java
-      template: http-java.json
+      template: *template
       skip: false
-    type:
-      settings:
-        schema: builtin:oneagent.features
-        scope: environment
+      parameters:
+        featureKey: SENSOR_WEBSERVER_BIZEVENTS_HTTP_INCOMING
+    type: *type
 
-  # Enable HTTP request capturing for Go services
-  - id: http-go
-    config:
-      name: HTTP request capturing for Go
-      template: http-go.json
-      skip: false
-    type:
-      settings:
-        schema: builtin:oneagent.features
-        scope: environment
-
-  # Enable HTTP request capturing for Node.js services
+  # Enable HTTP bizevent capturing for Node.js services
   - id: http-nodejs
     config:
-      name: HTTP request capturing for Node.js
-      template: http-nodejs.json
+      template: *template
       skip: false
-    type:
-      settings:
-        schema: builtin:oneagent.features
-        scope: environment
+      parameters:
+        featureKey: SENSOR_NODEJS_BIZEVENTS_HTTP_INCOMING
+    type: *type
+
+  # Enable HTTP bizevent capturing for Java services
+  - id: http-java
+    config:
+      template: *template
+      skip: false
+      parameters:
+        featureKey: SENSOR_JAVA_BIZEVENTS_HTTP_INCOMING
+    type: *type
+
+  # Enable HTTP bizevent capturing for Go services
+  - id: http-go
+    config:
+      template: *template
+      skip: false
+      parameters:
+        featureKey: SENSOR_GO_BIZEVENTS_HTTP_INCOMING
+    type: *type
