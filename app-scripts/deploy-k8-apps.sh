@@ -125,11 +125,56 @@ else
 fi
 
 # ==========================================================
-# Wait for pods to start and show status
+# Wait for critical EasyTrade pods to be ready
 # ==========================================================
 echo ""
-echo "Waiting for pods to initialize..."
-sleep 10
+echo "=========================================================="
+echo "Waiting for EasyTrade Critical Pods"
+echo "=========================================================="
+echo "The feature-flag-service requires the database to be ready."
+echo "Waiting for db and feature-flag-service pods..."
+echo ""
+
+# Wait for db pod to be ready (required for feature-flag-service)
+echo -n "  Waiting for db pod: "
+WAIT_COUNT=0
+MAX_WAIT=60  # 5 minutes max (60 * 5 seconds)
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    DB_READY=$(kubectl -n easytrade get pods -l app=db -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null)
+    if [ "$DB_READY" == "true" ]; then
+        echo "Ready!"
+        break
+    fi
+    echo -n "."
+    sleep 5
+    ((WAIT_COUNT++))
+done
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo ""
+    echo "  WARNING: Timed out waiting for db pod. Will try to continue anyway."
+fi
+
+# Wait for feature-flag-service pod to be ready
+echo -n "  Waiting for feature-flag-service pod: "
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    FFS_READY=$(kubectl -n easytrade get pods -l app=feature-flag-service -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null)
+    if [ "$FFS_READY" == "true" ]; then
+        echo "Ready!"
+        break
+    fi
+    echo -n "."
+    sleep 5
+    ((WAIT_COUNT++))
+done
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo ""
+    echo "  WARNING: Timed out waiting for feature-flag-service pod. Will try to continue anyway."
+fi
+
+# Give services a moment to fully initialize after pods are ready
+echo "  Allowing services to stabilize (15s)..."
+sleep 15
 
 # ==========================================================
 # Enable EasyTrade Problem Patterns
@@ -139,9 +184,6 @@ echo "=========================================================="
 echo "Enabling EasyTrade Problem Patterns"
 echo "=========================================================="
 if [ -f "./enable-easytrade-problems.sh" ]; then
-    # Wait a bit more for feature-flag-service to be ready
-    echo "Waiting for EasyTrade services to stabilize..."
-    sleep 30
     ./enable-easytrade-problems.sh
 else
     echo "  SKIPPED: enable-easytrade-problems.sh not found"

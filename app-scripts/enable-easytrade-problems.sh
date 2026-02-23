@@ -52,31 +52,44 @@ echo "  Namespace: $EASYTRADE_NAMESPACE"
 echo "  Patterns:  ${PROBLEM_PATTERNS[*]}"
 echo ""
 
-# Function to set feature flag
+# Function to set feature flag (with retries)
 set_feature_flag() {
     local base_url="$1"
     local flag_id="$2"
     local enabled="$3"
+    local max_retries=3
+    local retry_count=0
 
     echo -n "  Setting $flag_id to $enabled... "
 
-    local result=$(curl -s -X PUT "${base_url}/feature-flag-service/v1/flags/${flag_id}" \
-        -H "Content-Type: application/json" \
-        -d "{\"enabled\": ${enabled}}" 2>/dev/null)
+    while [ $retry_count -lt $max_retries ]; do
+        local result=$(curl -s -X PUT "${base_url}/feature-flag-service/v1/flags/${flag_id}" \
+            -H "Content-Type: application/json" \
+            -d "{\"enabled\": ${enabled}}" 2>/dev/null)
 
-    if echo "$result" | grep -q "\"enabled\":${enabled}"; then
-        echo "OK"
-        return 0
-    elif echo "$result" | grep -q "\"enabled\""; then
-        echo "OK (already set)"
-        return 0
-    else
-        echo "FAILED"
-        if [ -n "$result" ]; then
-            echo "       Response: $result"
+        if echo "$result" | grep -q "\"enabled\":${enabled}"; then
+            echo "OK"
+            return 0
+        elif echo "$result" | grep -q "\"enabled\""; then
+            echo "OK (already set)"
+            return 0
+        elif echo "$result" | grep -q "502 Bad Gateway\|503 Service\|504 Gateway"; then
+            ((retry_count++))
+            if [ $retry_count -lt $max_retries ]; then
+                echo -n "retry... "
+                sleep 5
+            fi
+        else
+            echo "FAILED"
+            if [ -n "$result" ]; then
+                echo "       Response: $result"
+            fi
+            return 1
         fi
-        return 1
-    fi
+    done
+
+    echo "FAILED (after $max_retries retries)"
+    return 1
 }
 
 # Get AKS credentials if not already connected
@@ -105,14 +118,43 @@ fi
 BASE_URL="http://${FRONTEND_IP}"
 echo "  Frontend URL: $BASE_URL"
 
-# Verify feature-flag-service is accessible
+# Verify feature-flag-service is accessible (with retries)
 echo "Checking feature-flag-service connectivity..."
-if ! curl -s "${BASE_URL}/feature-flag-service/v1/flags" &>/dev/null; then
-    echo "ERROR: Unable to connect to feature-flag-service"
-    echo "The service may still be starting up. Try again in a few moments."
+MAX_RETRIES=12  # 12 retries * 10 seconds = 2 minutes max
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    RESPONSE=$(curl -s -w "\n%{http_code}" "${BASE_URL}/feature-flag-service/v1/flags" 2>/dev/null)
+    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+
+    if [ "$HTTP_CODE" == "200" ]; then
+        echo "  Connected successfully."
+        break
+    elif [ "$HTTP_CODE" == "502" ] || [ "$HTTP_CODE" == "503" ] || [ "$HTTP_CODE" == "504" ]; then
+        ((RETRY_COUNT++))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "  Service not ready (HTTP $HTTP_CODE), retrying in 10 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+            sleep 10
+        fi
+    else
+        ((RETRY_COUNT++))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "  Connection failed (HTTP $HTTP_CODE), retrying in 10 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+            sleep 10
+        fi
+    fi
+done
+
+if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+    echo "ERROR: Unable to connect to feature-flag-service after $MAX_RETRIES attempts"
+    echo "The database or feature-flag-service may still be starting up."
+    echo ""
+    echo "Check pod status with:"
+    echo "  kubectl -n $EASYTRADE_NAMESPACE get pods"
+    echo ""
+    echo "You can retry manually with:"
+    echo "  ./enable-easytrade-problems.sh"
     exit 1
 fi
-echo "  Connected successfully."
 
 echo ""
 echo "--- ${ACTION^} Problem Patterns ---"
