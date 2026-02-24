@@ -332,35 +332,51 @@ enableVulnerabilityAnalytics() {
     fi
 }
 
-# Enable Python OpenTelemetry Support
-enablePythonOpenTelemetry() {
+# Enable Python OneAgent Features
+enablePythonOneAgentFeatures() {
     send_event "07-WorkshopConfig-PythonOTEL" "running"
     echo ""
-    echo "--- Enabling Python OpenTelemetry Support ---"
+    echo "--- Enabling Python OneAgent Features ---"
 
     local RESULT=0
 
-    # Enable OpenTelemetry for Python
-    applySettings20 "oneagent-python-opentelemetry" '[{
-        "schemaId": "builtin:oneagent.features",
-        "scope": "environment",
-        "value": {
-            "enabled": true,
-            "instrumentation": true,
-            "key": "SENSOR_PYTHON_OPENTELEMETRY"
-        }
-    }]' || RESULT=1
+    # Define all Python OneAgent features to enable
+    local PYTHON_FEATURES=(
+        "SENSOR_PYTHON_OPENTELEMETRY"
+        "SENSOR_PYTHON_BIZEVENTS_HTTP_INCOMING"
+        "SENSOR_PYTHON_AIOHTTP"
+        "SENSOR_PYTHON_ASYNCIO"
+        "SENSOR_PYTHON_BOTO3"
+        "SENSOR_PYTHON_CELERY"
+        "SENSOR_PYTHON_DJANGO"
+        "SENSOR_PYTHON_FASTAPI"
+        "SENSOR_PYTHON_FLASK"
+        "SENSOR_PYTHON_GRPC"
+        "SENSOR_PYTHON_KAFKA"
+        "SENSOR_PYTHON_MYSQL"
+        "SENSOR_PYTHON_PSYCOPG2"
+        "SENSOR_PYTHON_PYMONGO"
+        "SENSOR_PYTHON_REDIS"
+        "SENSOR_PYTHON_REQUESTS"
+        "SENSOR_PYTHON_SQLALCHEMY"
+        "SENSOR_PYTHON_STARLETTE"
+        "SENSOR_PYTHON_TORNADO"
+        "SENSOR_PYTHON_URLLIB3"
+    )
 
-    # Enable Python HTTP bizevent capturing
-    applySettings20 "oneagent-python-bizevents" '[{
-        "schemaId": "builtin:oneagent.features",
-        "scope": "environment",
-        "value": {
-            "enabled": true,
-            "instrumentation": true,
-            "key": "SENSOR_PYTHON_BIZEVENTS_HTTP_INCOMING"
-        }
-    }]' || RESULT=1
+    # Enable each Python feature
+    for feature in "${PYTHON_FEATURES[@]}"; do
+        local feature_lower=$(echo "$feature" | tr '[:upper:]' '[:lower:]' | sed 's/sensor_//')
+        applySettings20 "oneagent-$feature_lower" "[{
+            \"schemaId\": \"builtin:oneagent.features\",
+            \"scope\": \"environment\",
+            \"value\": {
+                \"enabled\": true,
+                \"instrumentation\": true,
+                \"key\": \"$feature\"
+            }
+        }]" || RESULT=1
+    done
 
     if [ $RESULT -eq 0 ]; then
         send_event "07-WorkshopConfig-PythonOTEL" "success"
@@ -738,7 +754,7 @@ if [ $OVERALL_RESULT -eq 0 ]; then
     configureManagementZones || OVERALL_RESULT=1
     enableKubernetesAppExperience || OVERALL_RESULT=1
     enableVulnerabilityAnalytics || OVERALL_RESULT=1
-    enablePythonOpenTelemetry || OVERALL_RESULT=1
+    enablePythonOneAgentFeatures || OVERALL_RESULT=1
 
     # Step 3: Deploy Monaco Settings 2.0 configs
     echo ""
