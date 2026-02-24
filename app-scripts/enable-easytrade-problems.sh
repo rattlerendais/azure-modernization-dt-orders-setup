@@ -8,8 +8,11 @@
 # Available problem patterns:
 #   - factory_crisis: Factory won't produce new cards
 #   - high_cpu_usage: Causes broker-service slowdown and high CPU
-#   - db_not_responding: Database throws errors on new trades
 #   - credit_card_meltdown: OrderController service error
+#
+# Note: db_not_responding is NOT enabled by default as it blocks
+#       all trades, preventing buy/sell bizevents from being generated.
+#       Enable manually if needed for specific demos.
 #
 # Usage: ./enable-easytrade-problems.sh [--disable]
 # ==========================================================
@@ -38,10 +41,10 @@ if [ "$1" == "--disable" ]; then
 fi
 
 # Problem patterns to enable/disable
+# Note: db_not_responding excluded - it blocks all trades
 PROBLEM_PATTERNS=(
     "factory_crisis"
     "high_cpu_usage"
-    "db_not_responding"
     "credit_card_meltdown"
 )
 
