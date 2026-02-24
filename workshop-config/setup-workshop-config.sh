@@ -387,6 +387,35 @@ enablePythonOneAgentFeatures() {
     return $RESULT
 }
 
+# Enable Davis Generative AI and Agentic AI
+enableDavisGenerativeAI() {
+    send_event "07-WorkshopConfig-DavisAI" "running"
+    echo ""
+    echo "--- Enabling Davis Generative AI & Agentic AI ---"
+
+    local RESULT=0
+
+    # Enable Generative AI settings
+    applySettings20 "davis-generative-ai" '[{
+        "schemaId": "builtin:davis-copilot",
+        "scope": "environment",
+        "value": {
+            "enableGenerativeAi": true,
+            "enableAgenticAi": true,
+            "enableDocumentSuggestions": true,
+            "enableEnvironmentAwareQueries": true
+        }
+    }]' || RESULT=1
+
+    if [ $RESULT -eq 0 ]; then
+        send_event "07-WorkshopConfig-DavisAI" "success"
+    else
+        send_event "07-WorkshopConfig-DavisAI" "failed"
+    fi
+
+    return $RESULT
+}
+
 # =============================================================================
 # Monaco v2 Functions (Settings 2.0 with Platform Token)
 # =============================================================================
@@ -755,6 +784,7 @@ if [ $OVERALL_RESULT -eq 0 ]; then
     enableKubernetesAppExperience || OVERALL_RESULT=1
     enableVulnerabilityAnalytics || OVERALL_RESULT=1
     enablePythonOneAgentFeatures || OVERALL_RESULT=1
+    enableDavisGenerativeAI || OVERALL_RESULT=1
 
     # Step 3: Deploy Monaco Settings 2.0 configs
     echo ""
