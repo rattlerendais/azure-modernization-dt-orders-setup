@@ -33,8 +33,9 @@ resources:
   # Problem patterns (remote directory with its own kustomization.yaml)
   - https://github.com/Dynatrace/easytrade/kubernetes-manifests/problem-patterns?ref=main
 
-# Patch to reduce loadgen resource requirements
-# Original: 1 CPU / 2Gi memory -> Reduced: 100m CPU / 256Mi memory
+# Patches for loadgen deployment:
+# 1. Reduce resource requirements (Original: 1 CPU / 2Gi -> Reduced: 100m CPU / 256Mi)
+# 2. Set RARE_VISITS_INTERVAL_MINUTES to 3 (default is 60) for more frequent longbuy/longsell trades
 patches:
   - patch: |-
       apiVersion: apps/v1
@@ -46,6 +47,11 @@ patches:
           spec:
             containers:
               - name: loadgen
+                env:
+                  - name: EASYTRADE_URL
+                    value: "http://frontendreverseproxy-easytrade"
+                  - name: RARE_VISITS_INTERVAL_MINUTES
+                    value: "3"
                 resources:
                   requests:
                     cpu: "100m"
