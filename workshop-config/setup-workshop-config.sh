@@ -311,22 +311,28 @@ enableVulnerabilityAnalytics() {
     fi
 
     local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
+    local existing_value=$(echo "$existing" | jq -r '.items[0].value // empty' 2>/dev/null)
 
     if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
         # Settings exist - update them with PUT
-        # Note: PUT only needs the "value" field, not schemaId or scope
+        # IMPORTANT: PUT requires ALL fields, so we merge existing values with our changes
         print_status "info" "Existing settings found ($existing_id), updating..."
+
+        # Merge: take existing value and update the two fields we care about
+        local updated_value=$(echo "$existing_value" | jq '. + {
+            "enableRuntimeVulnerabilityDetection": true,
+            "enableCodeLevelVulnerabilityDetection": true
+        }')
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       Updated value: $updated_value"
+        fi
 
         local response=$(curl -s -X PUT \
             "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{
-                "value": {
-                    "enableRuntimeVulnerabilityDetection": true,
-                    "enableCodeLevelVulnerabilityDetection": true
-                }
-            }')
+            -d "{\"value\": $updated_value}")
 
         if [ "$VERBOSE" = true ]; then
             echo "       PUT response: $response"
@@ -345,7 +351,7 @@ enableVulnerabilityAnalytics() {
             return 1
         fi
     else
-        # No existing settings - create with POST
+        # No existing settings - create with POST (include all required fields)
         print_status "info" "No existing settings found, creating..."
 
         local response=$(curl -s -X POST \
@@ -357,7 +363,24 @@ enableVulnerabilityAnalytics() {
                 "scope": "environment",
                 "value": {
                     "enableRuntimeVulnerabilityDetection": true,
-                    "enableCodeLevelVulnerabilityDetection": true
+                    "enableCodeLevelVulnerabilityDetection": true,
+                    "globalMonitoringModeTPV": "MONITORING_ON",
+                    "globalMonitoringModeJava": "MONITORING_ON",
+                    "globalMonitoringModeDotNet": "MONITORING_ON",
+                    "globalMonitoringModeGo": "MONITORING_ON",
+                    "technologies": {
+                        "enableDotNet": true,
+                        "enableDotNetRuntime": true,
+                        "enableGo": true,
+                        "enableJava": true,
+                        "enableJavaRuntime": true,
+                        "enableKubernetes": true,
+                        "enableNodeJs": true,
+                        "enableNodeJsRuntime": true,
+                        "enablePython": true,
+                        "enablePythonRuntime": true,
+                        "enablePhp": true
+                    }
                 }
             }]')
 
@@ -447,32 +470,70 @@ enableDavisGenerativeAI() {
     echo ""
     echo "--- Enabling Davis Generative AI & Agentic AI ---"
 
-    # First, check for existing Davis Copilot settings
+    # First, check if the Davis AI schema exists in this Dynatrace version
+    # Try multiple possible schema names
+    local DAVIS_SCHEMAS=("builtin:davis-copilot" "builtin:davis.copilot" "builtin:davis-ai" "builtin:hypermodal-ai")
+    local SCHEMA_ID=""
+
+    print_status "info" "Searching for Davis AI schema..."
+
+    for schema in "${DAVIS_SCHEMAS[@]}"; do
+        local check=$(curl -s -X GET \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$schema" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json")
+
+        local schema_error=$(echo "$check" | jq -r '.error.code // empty' 2>/dev/null)
+
+        if [ -z "$schema_error" ] || [ "$schema_error" == "null" ]; then
+            SCHEMA_ID="$schema"
+            if [ "$VERBOSE" = true ]; then
+                echo "       Found schema: $schema"
+            fi
+            break
+        fi
+    done
+
+    if [ -z "$SCHEMA_ID" ]; then
+        print_status "skip" "Davis AI schema not available in this Dynatrace version"
+        print_status "info" "Davis Copilot can be enabled manually in Settings > Preferences > Davis CoPilot"
+        send_event "07-WorkshopConfig-DavisAI" "skipped"
+        return 0
+    fi
+
+    # Check for existing settings
     print_status "info" "Checking existing Davis AI settings..."
     local existing=$(curl -s -X GET \
-        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects?schemaIds=builtin:davis-copilot&scopes=environment" \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects?schemaIds=$SCHEMA_ID&scopes=environment" \
         -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
         -H "Content-Type: application/json")
 
     local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
+    local existing_value=$(echo "$existing" | jq -r '.items[0].value // empty' 2>/dev/null)
 
     if [ "$VERBOSE" = true ]; then
         echo "       Existing settings response: $existing"
     fi
 
     if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
-        # Settings exist - update them with PUT
+        # Settings exist - update them with PUT (merge with existing values)
         print_status "info" "Existing settings found ($existing_id), updating..."
+
+        # Get schema to understand what properties are available
+        local schema_def=$(curl -s -X GET \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$SCHEMA_ID" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
+
+        # Try to enable all AI features by merging with existing
+        local updated_value=$(echo "$existing_value" | jq '. + {
+            "enableDavisCopilot": true
+        }' 2>/dev/null || echo '{"enableDavisCopilot": true}')
 
         local response=$(curl -s -X PUT \
             "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{
-                "value": {
-                    "enableDavisCopilot": true
-                }
-            }')
+            -d "{\"value\": $updated_value}")
 
         if [ "$VERBOSE" = true ]; then
             echo "       PUT response: $response"
@@ -486,6 +547,7 @@ enableDavisGenerativeAI() {
             return 0
         else
             print_status "fail" "Failed to update Davis AI settings: $error_msg"
+            print_status "info" "Davis Copilot can be enabled manually in Settings > Preferences > Davis CoPilot"
             send_event "07-WorkshopConfig-DavisAI" "failed"
             return 1
         fi
@@ -497,13 +559,13 @@ enableDavisGenerativeAI() {
             "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects" \
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '[{
-                "schemaId": "builtin:davis-copilot",
-                "scope": "environment",
-                "value": {
-                    "enableDavisCopilot": true
+            -d "[{
+                \"schemaId\": \"$SCHEMA_ID\",
+                \"scope\": \"environment\",
+                \"value\": {
+                    \"enableDavisCopilot\": true
                 }
-            }]')
+            }]")
 
         if [ "$VERBOSE" = true ]; then
             echo "       POST response: $response"
@@ -522,10 +584,10 @@ enableDavisGenerativeAI() {
                 return 0
             fi
             local error_msg=$(echo "$response" | jq -r '.error.message // .[0].error.message // empty' 2>/dev/null)
-            print_status "fail" "Failed to enable Davis AI settings: $error_msg"
-            echo "       Response: $response"
-            send_event "07-WorkshopConfig-DavisAI" "failed"
-            return 1
+            print_status "skip" "Davis AI schema found but settings failed: $error_msg"
+            print_status "info" "Davis Copilot can be enabled manually in Settings > Preferences > Davis CoPilot"
+            send_event "07-WorkshopConfig-DavisAI" "skipped"
+            return 0
         fi
     fi
 }
