@@ -470,14 +470,29 @@ enableDavisGenerativeAI() {
     echo ""
     echo "--- Enabling Davis Generative AI & Agentic AI ---"
 
-    # First, check if the Davis AI schema exists in this Dynatrace version
-    # Try multiple possible schema names
-    local DAVIS_SCHEMAS=("builtin:davis-copilot" "builtin:davis.copilot" "builtin:davis-ai" "builtin:hypermodal-ai")
+    # First, search for available Davis-related schemas
+    print_status "info" "Searching for Davis AI schemas..."
+
+    local all_schemas=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+        -H "Content-Type: application/json")
+
+    # Find schemas containing "davis" or "copilot" or "generative"
+    local davis_schemas=$(echo "$all_schemas" | jq -r '.items[] | select(.schemaId | test("davis|copilot|generative"; "i")) | .schemaId' 2>/dev/null)
+
+    if [ "$VERBOSE" = true ]; then
+        echo "       Found Davis-related schemas:"
+        echo "$davis_schemas" | sed 's/^/         /'
+    fi
+
+    # Look for the main opt-in schema (usually something like builtin:preferences.privacy)
     local SCHEMA_ID=""
+    local PROPERTY_NAME=""
 
-    print_status "info" "Searching for Davis AI schema..."
-
-    for schema in "${DAVIS_SCHEMAS[@]}"; do
+    # Check for specific schemas that control generative AI
+    # Note: The schema uses "service:" prefix, not "builtin:"
+    for schema in "service:davis.copilot.datamining-blocklist" "builtin:davis.copilot" "builtin:davis-copilot" "builtin:preferences.privacy"; do
         local check=$(curl -s -X GET \
             "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$schema" \
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
@@ -487,18 +502,41 @@ enableDavisGenerativeAI() {
 
         if [ -z "$schema_error" ] || [ "$schema_error" == "null" ]; then
             SCHEMA_ID="$schema"
+            # Get the property names from the schema
+            local properties=$(echo "$check" | jq -r '.properties | keys[]' 2>/dev/null)
             if [ "$VERBOSE" = true ]; then
                 echo "       Found schema: $schema"
+                echo "       Properties: $properties"
             fi
             break
         fi
     done
 
     if [ -z "$SCHEMA_ID" ]; then
-        print_status "skip" "Davis AI schema not available in this Dynatrace version"
-        print_status "info" "Davis Copilot can be enabled manually in Settings > Preferences > Davis CoPilot"
-        send_event "07-WorkshopConfig-DavisAI" "skipped"
-        return 0
+        # Try to find any schema with "generative" in it
+        local gen_schema=$(echo "$davis_schemas" | head -1)
+        if [ -n "$gen_schema" ]; then
+            SCHEMA_ID="$gen_schema"
+            if [ "$VERBOSE" = true ]; then
+                echo "       Using schema: $SCHEMA_ID"
+            fi
+        else
+            print_status "skip" "Davis AI schema not available in this Dynatrace version"
+            print_status "info" "Generative AI can be enabled manually: Settings > Preferences > Generative and agentic AI"
+            send_event "07-WorkshopConfig-DavisAI" "skipped"
+            return 0
+        fi
+    fi
+
+    # Get schema definition to understand required properties
+    print_status "info" "Checking schema properties for $SCHEMA_ID..."
+    local schema_def=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$SCHEMA_ID" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
+
+    if [ "$VERBOSE" = true ]; then
+        local props=$(echo "$schema_def" | jq -r '.properties | keys' 2>/dev/null)
+        echo "       Schema properties: $props"
     fi
 
     # Check for existing settings
@@ -515,19 +553,28 @@ enableDavisGenerativeAI() {
         echo "       Existing settings response: $existing"
     fi
 
+    # Build the value object - try multiple possible property names
+    # Based on Dynatrace UI, the property might be: enableGenerativeAi, enableDavisCopilot, enabled, etc.
+    local new_value='{
+        "enableGenerativeAi": true,
+        "enableAgenticAi": true,
+        "enableDavisCopilot": true,
+        "enabled": true
+    }'
+
     if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
         # Settings exist - update them with PUT (merge with existing values)
         print_status "info" "Existing settings found ($existing_id), updating..."
 
-        # Get schema to understand what properties are available
-        local schema_def=$(curl -s -X GET \
-            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$SCHEMA_ID" \
-            -H "Authorization: Bearer $DT_PLATFORM_TOKEN")
+        # Merge existing values with our new values
+        local updated_value=$(echo "$existing_value" | jq ". + $new_value" 2>/dev/null)
+        if [ -z "$updated_value" ] || [ "$updated_value" == "null" ]; then
+            updated_value="$new_value"
+        fi
 
-        # Try to enable all AI features by merging with existing
-        local updated_value=$(echo "$existing_value" | jq '. + {
-            "enableDavisCopilot": true
-        }' 2>/dev/null || echo '{"enableDavisCopilot": true}')
+        if [ "$VERBOSE" = true ]; then
+            echo "       Updated value: $updated_value"
+        fi
 
         local response=$(curl -s -X PUT \
             "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
@@ -547,7 +594,7 @@ enableDavisGenerativeAI() {
             return 0
         else
             print_status "fail" "Failed to update Davis AI settings: $error_msg"
-            print_status "info" "Davis Copilot can be enabled manually in Settings > Preferences > Davis CoPilot"
+            print_status "info" "Generative AI can be enabled manually: Settings > Preferences > Generative and agentic AI"
             send_event "07-WorkshopConfig-DavisAI" "failed"
             return 1
         fi
@@ -562,9 +609,7 @@ enableDavisGenerativeAI() {
             -d "[{
                 \"schemaId\": \"$SCHEMA_ID\",
                 \"scope\": \"environment\",
-                \"value\": {
-                    \"enableDavisCopilot\": true
-                }
+                \"value\": $new_value
             }]")
 
         if [ "$VERBOSE" = true ]; then
@@ -585,7 +630,7 @@ enableDavisGenerativeAI() {
             fi
             local error_msg=$(echo "$response" | jq -r '.error.message // .[0].error.message // empty' 2>/dev/null)
             print_status "skip" "Davis AI schema found but settings failed: $error_msg"
-            print_status "info" "Davis Copilot can be enabled manually in Settings > Preferences > Davis CoPilot"
+            print_status "info" "Generative AI can be enabled manually: Settings > Preferences > Generative and agentic AI"
             send_event "07-WorkshopConfig-DavisAI" "skipped"
             return 0
         fi
