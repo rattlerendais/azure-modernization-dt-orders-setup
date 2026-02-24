@@ -267,6 +267,32 @@ enableKubernetesAppExperience() {
     return $RESULT
 }
 
+# Activate New K8s App Experience for All Clusters (Environment Level)
+activateK8sClustersNewApp() {
+    send_event "07-WorkshopConfig-K8sClusterActivation" "running"
+    echo ""
+    echo "--- Activating New K8s App for All Clusters ---"
+
+    local RESULT=0
+
+    # Activate new K8s app at environment level (applies to all clusters)
+    applySettings20 "k8s-cluster-activation" '[{
+        "schemaId": "builtin:kubernetes.generic.metadata",
+        "scope": "environment",
+        "value": {
+            "activateNewKubernetesApp": true
+        }
+    }]' || RESULT=1
+
+    if [ $RESULT -eq 0 ]; then
+        send_event "07-WorkshopConfig-K8sClusterActivation" "success"
+    else
+        send_event "07-WorkshopConfig-K8sClusterActivation" "failed"
+    fi
+
+    return $RESULT
+}
+
 # Enable Vulnerability Analytics (Third-Party + Code-Level)
 enableVulnerabilityAnalytics() {
     send_event "07-WorkshopConfig-VulnerabilityAnalytics" "running"
@@ -782,6 +808,7 @@ if [ $OVERALL_RESULT -eq 0 ]; then
     configureAutoTags || OVERALL_RESULT=1
     configureManagementZones || OVERALL_RESULT=1
     enableKubernetesAppExperience || OVERALL_RESULT=1
+    activateK8sClustersNewApp || OVERALL_RESULT=1
     enableVulnerabilityAnalytics || OVERALL_RESULT=1
     enablePythonOneAgentFeatures || OVERALL_RESULT=1
     enableDavisGenerativeAI || OVERALL_RESULT=1
