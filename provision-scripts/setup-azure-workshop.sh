@@ -921,10 +921,10 @@ update_traveladvisor_manifest() {
 
     # Read DT credentials from the credentials file for OTEL configuration
     local dt_environment_id=""
-    local dt_api_token=""
+    local dt_classic_token=""
     if [ -f "$creds_file" ]; then
         dt_environment_id=$(cat "$creds_file" | jq -r '.DT_ENVIRONMENT_ID // empty')
-        dt_api_token=$(cat "$creds_file" | jq -r '.DT_API_TOKEN // empty')
+        dt_classic_token=$(cat "$creds_file" | jq -r '.DT_CLASSIC_TOKEN // empty')
     fi
 
     # Update AZURE_OPENAI_ENDPOINT
@@ -939,20 +939,21 @@ update_traveladvisor_manifest() {
     print_success "Updated Azure OpenAI credentials"
 
     # Update OTEL credentials if DT credentials are available
-    if [ -n "$dt_environment_id" ] && [ -n "$dt_api_token" ]; then
+    if [ -n "$dt_environment_id" ] && [ -n "$dt_classic_token" ]; then
 
         local otel_endpoint="https://${dt_environment_id}.live.dynatrace.com/api/v2/otlp"
 
         # Update OTEL_ENDPOINT
         sed -i 's~OTEL_ENDPOINT:.*~OTEL_ENDPOINT: "'"$otel_endpoint"'"~' "$TRAVELADVISOR_MANIFEST"
 
-        # Update OTEL_API_TOKEN
-        sed -i 's~OTEL_API_TOKEN:.*~OTEL_API_TOKEN: "'"$dt_api_token"'"~' "$TRAVELADVISOR_MANIFEST"
+        # Update OTEL_API_TOKEN (uses Classic Access Token for OTEL ingestion)
+        sed -i 's~OTEL_API_TOKEN:.*~OTEL_API_TOKEN: "'"$dt_classic_token"'"~' "$TRAVELADVISOR_MANIFEST"
 
-        print_success "Updated OTEL credentials"
+        print_success "Updated OTEL credentials (using Classic Access Token)"
     else
         print_warning "DT credentials not found in $creds_file - OTEL settings not updated"
-        echo "  To configure OTEL, ensure DT_ENVIRONMENT_ID and DT_API_TOKEN are in your credentials file"
+        echo "  To configure OTEL, ensure DT_ENVIRONMENT_ID and DT_CLASSIC_TOKEN are in your credentials file"
+        echo "  DT_CLASSIC_TOKEN requires scopes: openTelemetryTrace.ingest, metrics.ingest, logs.ingest"
     fi
 
     echo ""

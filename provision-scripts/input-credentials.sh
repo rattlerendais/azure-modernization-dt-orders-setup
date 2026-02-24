@@ -30,6 +30,7 @@ send_dt_event() {
 if [ -f "$CREDS_FILE" ]; then
     DT_BASEURL=$(cat $CREDS_FILE | jq -r '.DT_BASEURL // empty')
     DT_PLATFORM_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_PLATFORM_TOKEN // empty')
+    DT_CLASSIC_TOKEN=$(cat $CREDS_FILE | jq -r '.DT_CLASSIC_TOKEN // empty')
     DT_ENVIRONMENT_ID=$(cat $CREDS_FILE | jq -r '.DT_ENVIRONMENT_ID // empty')
     AZURE_RESOURCE_GROUP=$(cat $CREDS_FILE | jq -r '.AZURE_RESOURCE_GROUP // empty')
     AZURE_SUBSCRIPTION=$(cat $CREDS_FILE | jq -r '.AZURE_SUBSCRIPTION // empty')
@@ -64,6 +65,12 @@ echo ""
 echo "Dynatrace Platform Token (starts with dt0s16.)"
 read -p "                         (current: ${DT_PLATFORM_TOKEN:+****${DT_PLATFORM_TOKEN: -8}}) : " DT_PLATFORM_TOKEN_NEW
 
+# Collect Classic Access Token (for OTEL ingestion)
+echo ""
+echo "Dynatrace Classic Access Token for OTEL (starts with dt0c01.)"
+echo "Required scopes: openTelemetryTrace.ingest, metrics.ingest, logs.ingest"
+read -p "                         (current: ${DT_CLASSIC_TOKEN:+****${DT_CLASSIC_TOKEN: -8}}) : " DT_CLASSIC_TOKEN_NEW
+
 echo ""
 echo "==================================================================="
 
@@ -71,6 +78,7 @@ echo "==================================================================="
 RESOURCE_PREFIX=${RESOURCE_PREFIX_NEW:-$RESOURCE_PREFIX}
 DT_BASEURL=${DT_BASEURL_NEW:-$DT_BASEURL}
 DT_PLATFORM_TOKEN=${DT_PLATFORM_TOKEN_NEW:-$DT_PLATFORM_TOKEN}
+DT_CLASSIC_TOKEN=${DT_CLASSIC_TOKEN_NEW:-$DT_CLASSIC_TOKEN}
 # Azure Subscription is auto-detected from az account list
 
 # Set resource names based on prefix
@@ -140,6 +148,19 @@ if [[ ! "$DT_PLATFORM_TOKEN" =~ ^dt0s ]]; then
     fi
 fi
 
+# Validate Classic Token format (if provided)
+if [ -n "$DT_CLASSIC_TOKEN" ] && [[ ! "$DT_CLASSIC_TOKEN" =~ ^dt0c01 ]]; then
+    echo ""
+    echo -e "${RED}WARNING: Classic Access Token doesn't start with 'dt0c01'.${NC}"
+    echo "Make sure you created a Classic API Token with OTEL ingest scopes."
+    echo ""
+    read -p "Do you want to continue anyway? (y/n) : " CONTINUE_REPLY
+    if [ "$CONTINUE_REPLY" != "y" ]; then
+        echo "Exiting. Please create a Classic Access Token and try again."
+        exit 1
+    fi
+fi
+
 # Verify token works by making a simple API call
 echo ""
 echo "Verifying Platform Token..."
@@ -174,6 +195,7 @@ echo "  Environment ID     : $DT_ENVIRONMENT_ID"
 echo "  Platform URL (Gen3): $DT_BASEURL_PLATFORM"
 echo "  Live URL (Gen2)    : $DT_BASEURL_LIVE"
 echo "  Platform Token     : ****${DT_PLATFORM_TOKEN: -8}"
+echo "  Classic Token (OTEL): ${DT_CLASSIC_TOKEN:+****${DT_CLASSIC_TOKEN: -8}}${DT_CLASSIC_TOKEN:-<not set>}"
 echo ""
 echo "Azure Settings:"
 echo "  Subscription ID    : $AZURE_SUBSCRIPTION"
@@ -203,6 +225,7 @@ cat $CREDS_TEMPLATE_FILE | \
     sed 's~DT_BASEURL_LIVE_PLACEHOLDER~'"$DT_BASEURL_LIVE"'~' | \
     sed 's~DT_BASEURL_PLATFORM_PLACEHOLDER~'"$DT_BASEURL_PLATFORM"'~' | \
     sed 's~DT_PLATFORM_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
+    sed 's~DT_CLASSIC_TOKEN_PLACEHOLDER~'"$DT_CLASSIC_TOKEN"'~' | \
     sed 's~DT_API_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
     sed 's~DT_PAAS_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
     sed 's~DT_ACCESS_API_TOKEN_PLACEHOLDER~'"$DT_PLATFORM_TOKEN"'~' | \
