@@ -251,6 +251,18 @@ enableKubernetesAppExperience() {
 
     local SCHEMA_ID="builtin:app-transition.kubernetes"
 
+    # First, get the schema definition to understand the property structure
+    print_status "info" "Fetching schema definition..."
+    local schema_def=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$SCHEMA_ID" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+        -H "Content-Type: application/json")
+
+    if [ "$VERBOSE" = true ]; then
+        local props=$(echo "$schema_def" | jq -r '.properties | keys' 2>/dev/null)
+        echo "       Schema properties: $props"
+    fi
+
     # Check for existing settings
     print_status "info" "Checking existing K8s App Experience settings..."
     local existing=$(curl -s -X GET \
@@ -265,15 +277,20 @@ enableKubernetesAppExperience() {
     local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
     local existing_value=$(echo "$existing" | jq -r '.items[0].value // empty' 2>/dev/null)
 
-    # Value to set - enableKubernetesApp is the property for "New Kubernetes experience"
-    local new_value='{"enableKubernetesApp": true}'
+    # The schema requires kubernetesAppOptions object with enableKubernetesAppExperience inside
+    # Structure: { "kubernetesAppOptions": { "enableKubernetesAppExperience": true } }
+    local new_value='{
+        "kubernetesAppOptions": {
+            "enableKubernetesAppExperience": true
+        }
+    }'
 
     if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
         # Settings exist - update them with PUT
         print_status "info" "Existing settings found ($existing_id), updating..."
 
-        # Merge existing values with our new value
-        local updated_value=$(echo "$existing_value" | jq '. + {"enableKubernetesApp": true}' 2>/dev/null)
+        # Deep merge: update kubernetesAppOptions.enableKubernetesAppExperience = true
+        local updated_value=$(echo "$existing_value" | jq '.kubernetesAppOptions.enableKubernetesAppExperience = true' 2>/dev/null)
         if [ -z "$updated_value" ] || [ "$updated_value" == "null" ]; then
             updated_value="$new_value"
         fi
@@ -293,9 +310,10 @@ enableKubernetesAppExperience() {
         fi
 
         local error_msg=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
+        local response_code=$(echo "$response" | jq -r '.code // empty' 2>/dev/null)
 
         if [ -z "$error_msg" ] || [ "$error_msg" == "null" ]; then
-            print_status "ok" "Kubernetes App Experience updated"
+            print_status "ok" "Kubernetes App Experience updated (code:$response_code)"
             send_event "07-WorkshopConfig-K8sExperience" "success"
             return 0
         else
@@ -335,12 +353,36 @@ enableKubernetesAppExperience() {
 }
 
 # Activate New K8s App Experience for All Clusters (Environment Level)
+# Note: This is controlled by the kubernetesAppOptions.enableKubernetesAppExperience in
+# builtin:app-transition.kubernetes which is set by enableKubernetesAppExperience().
+# The separate cluster activation schema may not exist in all DT versions.
 activateK8sClustersNewApp() {
     send_event "07-WorkshopConfig-K8sClusterActivation" "running"
     echo ""
     echo "--- Activating New K8s App for All Clusters ---"
 
+    # First, check if the schema exists in this DT environment
     local SCHEMA_ID="builtin:kubernetes.generic.metadata"
+
+    print_status "info" "Checking if K8s cluster activation schema exists..."
+    local schema_check=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/schemas/$SCHEMA_ID" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+        -H "Content-Type: application/json")
+
+    local schema_error=$(echo "$schema_check" | jq -r '.error.code // empty' 2>/dev/null)
+
+    if [ "$schema_error" == "404" ]; then
+        # Schema doesn't exist - this is expected in some DT versions
+        # The K8s app experience is controlled by builtin:app-transition.kubernetes instead
+        print_status "skip" "K8s cluster activation schema not available (handled by K8s App Experience setting)"
+        send_event "07-WorkshopConfig-K8sClusterActivation" "skipped"
+        return 0
+    fi
+
+    if [ "$VERBOSE" = true ]; then
+        echo "       Schema check response: $schema_check"
+    fi
 
     # Check for existing settings
     print_status "info" "Checking existing K8s cluster activation settings..."
