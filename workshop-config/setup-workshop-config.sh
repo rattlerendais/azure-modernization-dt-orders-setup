@@ -299,16 +299,6 @@ enableVulnerabilityAnalytics() {
     echo ""
     echo "--- Enabling Vulnerability Analytics ---"
 
-    # Define the payload for vulnerability settings
-    local VULN_PAYLOAD='[{
-        "schemaId": "builtin:appsec.runtime-vulnerability-detection",
-        "scope": "environment",
-        "value": {
-            "enableRuntimeVulnerabilityDetection": true,
-            "enableCodeLevelVulnerabilityDetection": true
-        }
-    }]'
-
     # First, get existing settings to see current state
     print_status "info" "Checking existing vulnerability settings..."
     local existing=$(curl -s -X GET \
@@ -316,10 +306,15 @@ enableVulnerabilityAnalytics() {
         -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
         -H "Content-Type: application/json")
 
+    if [ "$VERBOSE" = true ]; then
+        echo "       Existing settings response: $existing"
+    fi
+
     local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
 
     if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
         # Settings exist - update them with PUT
+        # Note: PUT only needs the "value" field, not schemaId or scope
         print_status "info" "Existing settings found ($existing_id), updating..."
 
         local response=$(curl -s -X PUT \
@@ -327,15 +322,16 @@ enableVulnerabilityAnalytics() {
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{
-                "schemaId": "builtin:appsec.runtime-vulnerability-detection",
-                "scope": "environment",
                 "value": {
                     "enableRuntimeVulnerabilityDetection": true,
                     "enableCodeLevelVulnerabilityDetection": true
                 }
             }')
 
-        local http_code=$(echo "$response" | jq -r '.code // empty' 2>/dev/null)
+        if [ "$VERBOSE" = true ]; then
+            echo "       PUT response: $response"
+        fi
+
         local error_msg=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
 
         if [ -z "$error_msg" ] || [ "$error_msg" == "null" ]; then
@@ -344,6 +340,7 @@ enableVulnerabilityAnalytics() {
             return 0
         else
             print_status "fail" "Failed to update Vulnerability Analytics: $error_msg"
+            echo "       Response: $response"
             send_event "07-WorkshopConfig-VulnerabilityAnalytics" "failed"
             return 1
         fi
@@ -355,7 +352,18 @@ enableVulnerabilityAnalytics() {
             "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects" \
             -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$VULN_PAYLOAD")
+            -d '[{
+                "schemaId": "builtin:appsec.runtime-vulnerability-detection",
+                "scope": "environment",
+                "value": {
+                    "enableRuntimeVulnerabilityDetection": true,
+                    "enableCodeLevelVulnerabilityDetection": true
+                }
+            }]')
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       POST response: $response"
+        fi
 
         # Check if response indicates success
         if echo "$response" | jq -e '.[0].objectId' > /dev/null 2>&1; then
@@ -363,7 +371,14 @@ enableVulnerabilityAnalytics() {
             send_event "07-WorkshopConfig-VulnerabilityAnalytics" "success"
             return 0
         else
-            print_status "fail" "Failed to enable Vulnerability Analytics"
+            # Check for "already exists" which is OK
+            if echo "$response" | grep -q "already exists"; then
+                print_status "ok" "Vulnerability Analytics (already exists)"
+                send_event "07-WorkshopConfig-VulnerabilityAnalytics" "success"
+                return 0
+            fi
+            local error_msg=$(echo "$response" | jq -r '.error.message // .[0].error.message // empty' 2>/dev/null)
+            print_status "fail" "Failed to enable Vulnerability Analytics: $error_msg"
             echo "       Response: $response"
             send_event "07-WorkshopConfig-VulnerabilityAnalytics" "failed"
             return 1
@@ -432,27 +447,87 @@ enableDavisGenerativeAI() {
     echo ""
     echo "--- Enabling Davis Generative AI & Agentic AI ---"
 
-    local RESULT=0
+    # First, check for existing Davis Copilot settings
+    print_status "info" "Checking existing Davis AI settings..."
+    local existing=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects?schemaIds=builtin:davis-copilot&scopes=environment" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+        -H "Content-Type: application/json")
 
-    # Enable Generative AI settings
-    applySettings20 "davis-generative-ai" '[{
-        "schemaId": "builtin:davis-copilot",
-        "scope": "environment",
-        "value": {
-            "enableGenerativeAi": true,
-            "enableAgenticAi": true,
-            "enableDocumentSuggestions": true,
-            "enableEnvironmentAwareQueries": true
-        }
-    }]' || RESULT=1
+    local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
 
-    if [ $RESULT -eq 0 ]; then
-        send_event "07-WorkshopConfig-DavisAI" "success"
-    else
-        send_event "07-WorkshopConfig-DavisAI" "failed"
+    if [ "$VERBOSE" = true ]; then
+        echo "       Existing settings response: $existing"
     fi
 
-    return $RESULT
+    if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
+        # Settings exist - update them with PUT
+        print_status "info" "Existing settings found ($existing_id), updating..."
+
+        local response=$(curl -s -X PUT \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "value": {
+                    "enableDavisCopilot": true
+                }
+            }')
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       PUT response: $response"
+        fi
+
+        local error_msg=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
+
+        if [ -z "$error_msg" ] || [ "$error_msg" == "null" ]; then
+            print_status "ok" "Davis AI settings updated"
+            send_event "07-WorkshopConfig-DavisAI" "success"
+            return 0
+        else
+            print_status "fail" "Failed to update Davis AI settings: $error_msg"
+            send_event "07-WorkshopConfig-DavisAI" "failed"
+            return 1
+        fi
+    else
+        # No existing settings - create with POST
+        print_status "info" "No existing settings found, creating..."
+
+        local response=$(curl -s -X POST \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '[{
+                "schemaId": "builtin:davis-copilot",
+                "scope": "environment",
+                "value": {
+                    "enableDavisCopilot": true
+                }
+            }]')
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       POST response: $response"
+        fi
+
+        # Check if response indicates success
+        if echo "$response" | jq -e '.[0].objectId' > /dev/null 2>&1; then
+            print_status "ok" "Davis AI settings enabled"
+            send_event "07-WorkshopConfig-DavisAI" "success"
+            return 0
+        else
+            # Check for "already exists" which is OK
+            if echo "$response" | grep -q "already exists"; then
+                print_status "ok" "Davis AI settings (already exists)"
+                send_event "07-WorkshopConfig-DavisAI" "success"
+                return 0
+            fi
+            local error_msg=$(echo "$response" | jq -r '.error.message // .[0].error.message // empty' 2>/dev/null)
+            print_status "fail" "Failed to enable Davis AI settings: $error_msg"
+            echo "       Response: $response"
+            send_event "07-WorkshopConfig-DavisAI" "failed"
+            return 1
+        fi
+    fi
 }
 
 # =============================================================================
