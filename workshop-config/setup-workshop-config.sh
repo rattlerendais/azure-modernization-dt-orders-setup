@@ -340,24 +340,89 @@ activateK8sClustersNewApp() {
     echo ""
     echo "--- Activating New K8s App for All Clusters ---"
 
-    local RESULT=0
+    local SCHEMA_ID="builtin:kubernetes.generic.metadata"
 
-    # Activate new K8s app at environment level (applies to all clusters)
-    applySettings20 "k8s-cluster-activation" '[{
-        "schemaId": "builtin:kubernetes.generic.metadata",
-        "scope": "environment",
-        "value": {
-            "activateNewKubernetesApp": true
-        }
-    }]' || RESULT=1
+    # Check for existing settings
+    print_status "info" "Checking existing K8s cluster activation settings..."
+    local existing=$(curl -s -X GET \
+        "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects?schemaIds=$SCHEMA_ID&scopes=environment" \
+        -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+        -H "Content-Type: application/json")
 
-    if [ $RESULT -eq 0 ]; then
-        send_event "07-WorkshopConfig-K8sClusterActivation" "success"
-    else
-        send_event "07-WorkshopConfig-K8sClusterActivation" "failed"
+    if [ "$VERBOSE" = true ]; then
+        echo "       Existing settings response: $existing"
     fi
 
-    return $RESULT
+    local existing_id=$(echo "$existing" | jq -r '.items[0].objectId // empty' 2>/dev/null)
+    local existing_value=$(echo "$existing" | jq -r '.items[0].value // empty' 2>/dev/null)
+
+    # Value to set
+    local new_value='{"activateNewKubernetesApp": true}'
+
+    if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
+        # Settings exist - update them with PUT
+        print_status "info" "Existing settings found ($existing_id), updating..."
+
+        # Merge existing values with our new value
+        local updated_value=$(echo "$existing_value" | jq '. + {"activateNewKubernetesApp": true}' 2>/dev/null)
+        if [ -z "$updated_value" ] || [ "$updated_value" == "null" ]; then
+            updated_value="$new_value"
+        fi
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       Updated value: $updated_value"
+        fi
+
+        local response=$(curl -s -X PUT \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects/$existing_id" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"value\": $updated_value}")
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       PUT response: $response"
+        fi
+
+        local error_msg=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
+
+        if [ -z "$error_msg" ] || [ "$error_msg" == "null" ]; then
+            print_status "ok" "K8s cluster activation updated"
+            send_event "07-WorkshopConfig-K8sClusterActivation" "success"
+            return 0
+        else
+            print_status "fail" "Failed to update K8s cluster activation: $error_msg"
+            send_event "07-WorkshopConfig-K8sClusterActivation" "failed"
+            return 1
+        fi
+    else
+        # No existing settings - create with POST
+        print_status "info" "No existing settings found, creating..."
+
+        local response=$(curl -s -X POST \
+            "$DT_BASEURL_PLATFORM/platform/classic/environment-api/v2/settings/objects" \
+            -H "Authorization: Bearer $DT_PLATFORM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "[{
+                \"schemaId\": \"$SCHEMA_ID\",
+                \"scope\": \"environment\",
+                \"value\": $new_value
+            }]")
+
+        if [ "$VERBOSE" = true ]; then
+            echo "       POST response: $response"
+        fi
+
+        if echo "$response" | jq -e '.[0].objectId' > /dev/null 2>&1; then
+            print_status "ok" "K8s cluster activation enabled"
+            send_event "07-WorkshopConfig-K8sClusterActivation" "success"
+            return 0
+        else
+            local error_msg=$(echo "$response" | jq -r '.error.message // .[0].error.message // empty' 2>/dev/null)
+            print_status "fail" "Failed to enable K8s cluster activation: $error_msg"
+            send_event "07-WorkshopConfig-K8sClusterActivation" "failed"
+            return 1
+        fi
+    fi
 }
 
 # Enable Vulnerability Analytics (Third-Party + Code-Level)
