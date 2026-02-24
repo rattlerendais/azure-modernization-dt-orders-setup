@@ -553,13 +553,16 @@ enableDavisGenerativeAI() {
         echo "       Existing settings response: $existing"
     fi
 
-    # Build the value object - try multiple possible property names
-    # Based on Dynatrace UI, the property might be: enableGenerativeAi, enableDavisCopilot, enabled, etc.
+    # Build the value object with correct property names from schema:
+    # - enableCopilot: main toggle for generative AI
+    # - enableAgenticAi: requires enableCopilot=true first
+    # - enableDocumentSuggestion: document suggestions feature
+    # - enableTenantAwareDataMining: environment-aware queries
     local new_value='{
-        "enableGenerativeAi": true,
+        "enableCopilot": true,
         "enableAgenticAi": true,
-        "enableDavisCopilot": true,
-        "enabled": true
+        "enableDocumentSuggestion": true,
+        "enableTenantAwareDataMining": true
     }'
 
     if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
