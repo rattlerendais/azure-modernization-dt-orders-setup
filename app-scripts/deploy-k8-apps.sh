@@ -189,6 +189,141 @@ else
     echo "  SKIPPED: enable-easytrade-problems.sh not found"
 fi
 
+# ==========================================================
+# Seed Initial Trades for Bizevents
+# ==========================================================
+echo ""
+echo "=========================================================="
+echo "Seeding Initial Trades (for Bizevents)"
+echo "=========================================================="
+
+# Get frontend IP
+FRONTEND_IP=$(kubectl -n easytrade get svc frontendreverseproxy-easytrade -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+
+if [ -n "$FRONTEND_IP" ]; then
+    BASE_URL="http://${FRONTEND_IP}"
+    echo "  Frontend URL: $BASE_URL"
+
+    # Wait for broker-service to be ready
+    echo -n "  Waiting for broker-service: "
+    WAIT_COUNT=0
+    MAX_WAIT=24  # 2 minutes max
+    while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/broker-service/v1/instrument" 2>/dev/null)
+        if [ "$HTTP_CODE" == "200" ]; then
+            echo "Ready!"
+            break
+        fi
+        echo -n "."
+        sleep 5
+        ((WAIT_COUNT++))
+    done
+
+    if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+        echo ""
+        echo "  WARNING: broker-service not ready, skipping seed trades"
+    else
+        # Deposit money to test accounts (accounts 1-3)
+        echo "  Depositing funds to test accounts..."
+        for ACCOUNT_ID in 1 2 3; do
+            curl -s -X POST "${BASE_URL}/broker-service/v1/balance/${ACCOUNT_ID}/deposit" \
+                -H "Content-Type: application/json" \
+                -d '{"amount": 10000, "name": "Seed Deposit", "address": "Workshop", "email": "workshop@test.com", "cardNumber": "4111111111111111", "cardType": "VISA", "cvv": "123"}' > /dev/null 2>&1
+        done
+        echo "    Deposited to accounts 1, 2, 3"
+
+        # Execute seed trades
+        echo "  Executing seed trades..."
+        TRADE_ERRORS=0
+
+        # Quick Buy trades (10 trades across different instruments)
+        echo -n "    Quick Buy (10 trades): "
+        for i in {1..10}; do
+            ACCOUNT_ID=$(( (i % 3) + 1 ))
+            INSTRUMENT_ID=$(( (i % 5) + 1 ))
+            RESULT=$(curl -s -X POST "${BASE_URL}/broker-service/v1/trade/buy" \
+                -H "Content-Type: application/json" \
+                -d "{\"accountId\": ${ACCOUNT_ID}, \"instrumentId\": ${INSTRUMENT_ID}, \"amount\": $((RANDOM % 10 + 1))}" 2>/dev/null)
+            if echo "$RESULT" | grep -q "transactionHappened.*true\|Instant Buy done"; then
+                echo -n "."
+            else
+                echo -n "x"
+                ((TRADE_ERRORS++))
+            fi
+            sleep 0.5
+        done
+        echo " Done"
+
+        # Quick Sell trades (10 trades)
+        echo -n "    Quick Sell (10 trades): "
+        for i in {1..10}; do
+            ACCOUNT_ID=$(( (i % 3) + 1 ))
+            INSTRUMENT_ID=$(( (i % 5) + 1 ))
+            RESULT=$(curl -s -X POST "${BASE_URL}/broker-service/v1/trade/sell" \
+                -H "Content-Type: application/json" \
+                -d "{\"accountId\": ${ACCOUNT_ID}, \"instrumentId\": ${INSTRUMENT_ID}, \"amount\": $((RANDOM % 5 + 1))}" 2>/dev/null)
+            if echo "$RESULT" | grep -q "transactionHappened.*true\|Instant Sell done"; then
+                echo -n "."
+            else
+                echo -n "x"
+                ((TRADE_ERRORS++))
+            fi
+            sleep 0.5
+        done
+        echo " Done"
+
+        # Long Buy trades (10 trades)
+        echo -n "    Long Buy (10 trades): "
+        for i in {1..10}; do
+            ACCOUNT_ID=$(( (i % 3) + 1 ))
+            INSTRUMENT_ID=$(( (i % 5) + 1 ))
+            DURATION=$(( (RANDOM % 12) + 1 ))
+            PRICE=$(( (RANDOM % 50) + 100 ))
+            RESULT=$(curl -s -X POST "${BASE_URL}/broker-service/v1/trade/long/buy" \
+                -H "Content-Type: application/json" \
+                -d "{\"accountId\": ${ACCOUNT_ID}, \"instrumentId\": ${INSTRUMENT_ID}, \"amount\": $((RANDOM % 5 + 1)), \"duration\": ${DURATION}, \"price\": ${PRICE}}" 2>/dev/null)
+            if echo "$RESULT" | grep -q "LongBuy registered"; then
+                echo -n "."
+            else
+                echo -n "x"
+                ((TRADE_ERRORS++))
+            fi
+            sleep 0.5
+        done
+        echo " Done"
+
+        # Long Sell trades (10 trades)
+        echo -n "    Long Sell (10 trades): "
+        for i in {1..10}; do
+            ACCOUNT_ID=$(( (i % 3) + 1 ))
+            INSTRUMENT_ID=$(( (i % 5) + 1 ))
+            DURATION=$(( (RANDOM % 12) + 1 ))
+            PRICE=$(( (RANDOM % 50) + 100 ))
+            RESULT=$(curl -s -X POST "${BASE_URL}/broker-service/v1/trade/long/sell" \
+                -H "Content-Type: application/json" \
+                -d "{\"accountId\": ${ACCOUNT_ID}, \"instrumentId\": ${INSTRUMENT_ID}, \"amount\": $((RANDOM % 5 + 1)), \"duration\": ${DURATION}, \"price\": ${PRICE}}" 2>/dev/null)
+            if echo "$RESULT" | grep -q "LongSell registered"; then
+                echo -n "."
+            else
+                echo -n "x"
+                ((TRADE_ERRORS++))
+            fi
+            sleep 0.5
+        done
+        echo " Done"
+
+        echo ""
+        if [ $TRADE_ERRORS -eq 0 ]; then
+            echo "  All 40 seed trades completed successfully!"
+        else
+            echo "  Seed trades completed with $TRADE_ERRORS error(s)"
+        fi
+        echo "  Bizevents: com.easytrade.quick-buy, quick-sell, long-buy, long-sell"
+    fi
+else
+    echo "  SKIPPED: Could not get frontend IP"
+fi
+
 echo ""
 echo "=========================================================="
 echo "Pod Status Summary"
