@@ -38,9 +38,17 @@ if [ -f "$CREDS_FILE" ]; then
     RESOURCE_PREFIX=$(cat $CREDS_FILE | jq -r '.RESOURCE_PREFIX // empty')
 fi
 
-# Get default Azure subscription if not set
+# Get Azure subscription if not set
+# Prefer subscription matching "Azure HOI EA-" pattern WITHOUT trailing alphabet (e.g., "Azure HOI EA-2xxx" not "Azure HOI EA-2xxxA")
 if [ -z "$AZURE_SUBSCRIPTION" ]; then
-    AZURE_SUBSCRIPTION_ID=$(az account list --all --query "[?isDefault].id" --output tsv)
+    # First try to find the HOI subscription without trailing letter (name ends with digit)
+    AZURE_SUBSCRIPTION_ID=$(az account list --all --query "[?starts_with(name, 'Azure HOI EA-')].{id:id, name:name}" -o json 2>/dev/null | \
+        jq -r '[.[] | select(.name | test("EA-[0-9]+$"))] | .[0].id // empty')
+
+    # Fall back to default subscription if HOI pattern not found
+    if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+        AZURE_SUBSCRIPTION_ID=$(az account list --all --query "[?isDefault].id" --output tsv)
+    fi
     AZURE_SUBSCRIPTION=$AZURE_SUBSCRIPTION_ID
 fi
 
