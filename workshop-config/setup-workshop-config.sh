@@ -1179,8 +1179,9 @@ if [ $OVERALL_RESULT -eq 0 ]; then
     echo "=== Step 2: Settings 2.0 Configuration (API) ==="
     configureAutoTags || OVERALL_RESULT=1
     configureManagementZones || OVERALL_RESULT=1
-    enableKubernetesAppExperience || OVERALL_RESULT=1
-    activateK8sClustersNewApp || OVERALL_RESULT=1
+    # Temporarily disabled - K8s App Experience settings need schema property validation
+    # enableKubernetesAppExperience || OVERALL_RESULT=1
+    # activateK8sClustersNewApp || OVERALL_RESULT=1
     enableVulnerabilityAnalytics || OVERALL_RESULT=1
     enablePythonOneAgentFeatures || OVERALL_RESULT=1
     enableDavisGenerativeAI || OVERALL_RESULT=1
