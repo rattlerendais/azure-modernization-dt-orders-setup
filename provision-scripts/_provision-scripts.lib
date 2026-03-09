@@ -413,11 +413,11 @@ provision_monolith_vm()
 
     VM_STATE="$(az vm create \
       --name "$HOSTNAME" \
-      --resource-group "$AZURE_RESOURCE_GROUP" \
+      --resource-group "$AZURE_RESOURCE_GROUP-mono" \
       --image Ubuntu2204 \
       --tags Owner=azure-modernize-workshop \
       --subscription "$AZURE_SUBSCRIPTION" \
-      --location "$AZURE_LOCATION" \
+      --location "$AZURE_LOCATION2" \
       --custom-data "$INIT_FILE_GEN" \
       --authentication-type password \
       --admin-username workshop \
@@ -435,7 +435,7 @@ provision_monolith_vm()
       return 1
     else
       echo "Opening Ports"
-      OPEN_PORT="$(az vm open-port --port 80 --priority 1010 --resource-group "$AZURE_RESOURCE_GROUP" --name "$HOSTNAME" --subscription "$AZURE_SUBSCRIPTION")"
+      OPEN_PORT="$(az vm open-port --port 80 --priority 1010 --resource-group "$AZURE_RESOURCE_GROUP-mono" --name "$HOSTNAME" --subscription "$AZURE_SUBSCRIPTION")"
     fi
   fi
 }
