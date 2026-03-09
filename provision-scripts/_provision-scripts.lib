@@ -173,8 +173,8 @@ create_aks_cluster()
     az aks create \
       --resource-group $AZURE_RESOURCE_GROUP \
       --name $AZURE_AKS_CLUSTER_NAME \
-      --node-count 4 \
-      --node-vm-size 'Standard_DC1ds_v3' \
+      --node-count 2 \
+      --node-vm-size 'Standard_L2aos_v4' \
       --subscription $AZURE_SUBSCRIPTION \
       --os-sku AzureLinux \
       --tags Owner=azure-modernize-workshop \
