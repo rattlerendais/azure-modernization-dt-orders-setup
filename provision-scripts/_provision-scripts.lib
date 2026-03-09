@@ -426,7 +426,7 @@ provision_monolith_vm()
       --image Ubuntu2204 \
       --tags Owner=azure-modernize-workshop \
       --subscription "$AZURE_SUBSCRIPTION" \
-      --location "$AZURE_LOCATION2" \
+      --location "$AZURE_LOCATION" \
       --custom-data "$INIT_FILE_GEN" \
       --authentication-type password \
       --admin-username workshop \
