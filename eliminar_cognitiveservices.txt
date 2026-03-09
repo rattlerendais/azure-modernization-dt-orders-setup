@@ -1,0 +1,7 @@
+Para eliminar los servicios cognitivos manualmemnte para el caso de que al ejecutar varias veces el script de aprovisionamiento de la infraestructura salga un error indicando que existe el recurso y no se ha eliminado totalmente
+
+az cognitiveservices account purge \
+  --name "dynatrace-azure-workshop-aifoundry" \
+  --resource-group "dynatrace-azure-workshop" \
+  --location "eastus" \
+  --subscription "id_suscripcion"
