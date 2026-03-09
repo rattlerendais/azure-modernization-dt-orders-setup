@@ -303,13 +303,13 @@ create_resource_group()
               --subscription "$AZURE_SUBSCRIPTION"
             echo "-------"
 
-            echo "Provisioning resource group: $AZURE_RESOURCE_GROUP-mono"
-            echo "--------"
-             az group create \
-              --location "eastus2" \
-              --name "$AZURE_RESOURCE_GROUP-mono" \
-              --subscription "$AZURE_SUBSCRIPTION"
-            echo "-------"
+            #echo "Provisioning resource group: $AZURE_RESOURCE_GROUP-mono"
+            #echo "--------"
+            # az group create \
+            #  --location "eastus2" \
+            #  --name "$AZURE_RESOURCE_GROUP-mono" \
+            #  --subscription "$AZURE_SUBSCRIPTION"
+            #echo "-------"
 
             DT_SEND_EVENT=$(curl -s -X POST https://dt-event-send-dteve5duhvdddbea.eastus2-01.azurewebsites.net/api/send-event \
               -H "Content-Type: application/json" \
@@ -422,7 +422,7 @@ provision_monolith_vm()
 
     VM_STATE="$(az vm create \
       --name "$HOSTNAME" \
-      --resource-group "$AZURE_RESOURCE_GROUP-mono" \
+      --resource-group "$AZURE_RESOURCE_GROUP" \
       --image Ubuntu2204 \
       --tags Owner=azure-modernize-workshop \
       --subscription "$AZURE_SUBSCRIPTION" \
@@ -444,7 +444,7 @@ provision_monolith_vm()
       return 1
     else
       echo "Opening Ports"
-      OPEN_PORT="$(az vm open-port --port 80 --priority 1010 --resource-group "$AZURE_RESOURCE_GROUP-mono" --name "$HOSTNAME" --subscription "$AZURE_SUBSCRIPTION")"
+      OPEN_PORT="$(az vm open-port --port 80 --priority 1010 --resource-group "$AZURE_RESOURCE_GROUP" --name "$HOSTNAME" --subscription "$AZURE_SUBSCRIPTION")"
     fi
   fi
 }
