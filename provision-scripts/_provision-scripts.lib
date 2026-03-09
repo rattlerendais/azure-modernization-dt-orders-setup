@@ -173,7 +173,7 @@ create_aks_cluster()
     az aks create \
       --resource-group $AZURE_RESOURCE_GROUP \
       --name $AZURE_AKS_CLUSTER_NAME \
-      --node-count 2 \
+      --node-count 1 \
       --node-vm-size 'Standard_L2aos_v4' \
       --subscription $AZURE_SUBSCRIPTION \
       --os-sku AzureLinux \

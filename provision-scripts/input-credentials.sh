@@ -71,6 +71,7 @@ read -p "                         (current: $DT_BASEURL) : " DT_BASEURL_NEW
 # Collect Platform Token
 echo ""
 echo "Dynatrace Platform Token (starts with dt0s16.)"
+echo "Required scopes: settings:objects:write, settings:objects:read, settings:schemas:read, app-engine:apps:run, document:documents:read, document:documents:write"
 read -p "                         (current: ${DT_PLATFORM_TOKEN:+****${DT_PLATFORM_TOKEN: -8}}) : " DT_PLATFORM_TOKEN_NEW
 
 # Collect Classic Access Token (for OTEL ingestion)
