@@ -306,7 +306,7 @@ create_resource_group()
             echo "Provisioning resource group: $AZURE_RESOURCE_GROUP-mono"
             echo "--------"
              az group create \
-              --location "$AZURE_LOCATION2" \
+              --location "eastus2" \
               --name "$AZURE_RESOURCE_GROUP-mono" \
               --subscription "$AZURE_SUBSCRIPTION"
             echo "-------"
