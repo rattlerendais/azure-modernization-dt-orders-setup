@@ -422,7 +422,7 @@ provision_monolith_vm()
       --authentication-type password \
       --admin-username workshop \
       --admin-password Workshop123# \
-      --size Standard_DS11-1_v2 \
+      --size Standard_DC2ds_v3 \
       --public-ip-sku Standard \
       | jq -r '.powerState')"
     JSON_EVENT='{"id":"1","step":"'"$PROVISIONING_STEP"'","event.provider":"azure-workshop-provisioning","event.category":"azure-workshop","user":"'"$EMAIL"'","event.type":"provisioning-step","vmState":"'"$VM_STATE"'","DT_ENVIRONMENT_ID":"'"$DT_ENVIRONMENT_ID"'"}'
